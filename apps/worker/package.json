@@ -1,0 +1,24 @@
+{
+  "name": "@godmodeprod/worker",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39",
+    "@google/generative-ai": "^0.24",
+    "@supabase/supabase-js": "^2",
+    "bullmq": "^5",
+    "ioredis": "^5",
+    "@godmodeprod/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4",
+    "typescript": "^5.7"
+  }
+}
