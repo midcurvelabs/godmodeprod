@@ -1,30 +1,136 @@
 "use client";
 
 import { ChevronDown, Plus } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useEpisodeStore } from "@/lib/stores/episode-store";
+import { NewEpisodeModal } from "@/components/ui/new-episode-modal";
+import { StatusPill } from "@/components/ui/status-pill";
+
+function statusToPillType(status: string) {
+  if (["delivered", "posted"].includes(status)) return "done" as const;
+  if (["recording"].includes(status)) return "live" as const;
+  if (status.includes("running") || status.includes("processing"))
+    return "in_progress" as const;
+  if (["created"].includes(status)) return "planned" as const;
+  return "planned" as const;
+}
 
 export function EpisodeBar() {
+  const {
+    currentShow,
+    currentEpisode,
+    episodes,
+    setCurrentEpisode,
+    fetchShows,
+    fetchEpisodes,
+  } = useEpisodeStore();
+
+  const [showModal, setShowModal] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchShows();
+  }, [fetchShows]);
+
+  useEffect(() => {
+    if (currentShow) {
+      fetchEpisodes(currentShow.id);
+    }
+  }, [currentShow, fetchEpisodes]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   return (
-    <header className="h-14 bg-bg-surface border-b border-border flex items-center justify-between px-6">
-      {/* Episode selector */}
-      <div className="flex items-center gap-3">
-        <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-bg-elevated border border-border hover:border-text-muted transition-colors text-sm">
-          <span className="font-display text-lg text-accent">EP 01</span>
-          <span className="text-text-secondary">—</span>
-          <span className="text-text-primary">Select Episode</span>
-          <ChevronDown size={14} className="text-text-muted" />
+    <>
+      <header className="h-14 bg-bg-surface border-b border-border flex items-center justify-between px-6">
+        <div className="flex items-center gap-3">
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-bg-elevated border border-border hover:border-text-muted transition-colors text-sm"
+            >
+              {currentEpisode ? (
+                <>
+                  <span className="font-display text-lg text-accent">
+                    EP {String(currentEpisode.episode_number).padStart(2, "0")}
+                  </span>
+                  <span className="text-text-secondary">—</span>
+                  <span className="text-text-primary truncate max-w-[200px]">
+                    {currentEpisode.title}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="font-display text-lg text-accent">EP</span>
+                  <span className="text-text-secondary">—</span>
+                  <span className="text-text-primary">Select Episode</span>
+                </>
+              )}
+              <ChevronDown size={14} className="text-text-muted" />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 w-80 bg-bg-surface border border-border rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto">
+                {episodes.length === 0 ? (
+                  <div className="p-4 text-center text-text-muted text-sm">
+                    No episodes yet
+                  </div>
+                ) : (
+                  episodes.map((ep) => (
+                    <button
+                      key={ep.id}
+                      onClick={() => {
+                        setCurrentEpisode(ep);
+                        setDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-bg-elevated transition-colors ${
+                        currentEpisode?.id === ep.id ? "bg-accent/10" : ""
+                      }`}
+                    >
+                      <span className="font-display text-lg text-accent shrink-0">
+                        EP {String(ep.episode_number).padStart(2, "0")}
+                      </span>
+                      <span className="text-sm text-text-primary truncate flex-1">
+                        {ep.title}
+                      </span>
+                      <StatusPill
+                        status={statusToPillType(ep.status)}
+                        label={ep.status.replace(/_/g, " ")}
+                      />
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {currentEpisode && (
+            <StatusPill
+              status={statusToPillType(currentEpisode.status)}
+              label={currentEpisode.status.replace(/_/g, " ")}
+            />
+          )}
+        </div>
+
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
+        >
+          <Plus size={16} />
+          <span>New Episode</span>
         </button>
+      </header>
 
-        {/* Status badge placeholder */}
-        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium uppercase tracking-wider bg-bg-elevated text-text-muted border border-border">
-          No episode
-        </span>
-      </div>
-
-      {/* New episode button */}
-      <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors">
-        <Plus size={16} />
-        <span>New Episode</span>
-      </button>
-    </header>
+      {showModal && <NewEpisodeModal onClose={() => setShowModal(false)} />}
+    </>
   );
 }
