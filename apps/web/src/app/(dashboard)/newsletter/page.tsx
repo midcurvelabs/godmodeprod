@@ -10,6 +10,8 @@ import {
   AlertCircle,
   Check,
   Mail,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 
@@ -37,6 +39,9 @@ export default function NewsletterPage() {
   const [editNotes, setEditNotes] = useState("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [hasTranscript, setHasTranscript] = useState(false);
+  const [tone, setTone] = useState<"default" | "formal" | "shorter">("default");
+  const [sections, setSections] = useState<string[]>(["intro", "topics", "quotes", "links", "closing"]);
+  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const fetchNewsletter = useCallback(async () => {
     if (!currentEpisode) return;
@@ -80,6 +85,8 @@ export default function NewsletterPage() {
       body: JSON.stringify({
         episodeId: currentEpisode.id,
         showId: currentShow.id,
+        tone,
+        sections,
       }),
     });
   }
@@ -157,6 +164,56 @@ export default function NewsletterPage() {
                   Processed transcript
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Tone Selector */}
+          <div className="p-4 border-b border-border">
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted mb-2">
+              Tone
+            </h3>
+            <select
+              value={tone}
+              onChange={(e) => setTone(e.target.value as "default" | "formal" | "shorter")}
+              disabled={!!newsletter}
+              className="w-full bg-bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="default">Default</option>
+              <option value="formal">More formal</option>
+              <option value="shorter">Shorter</option>
+            </select>
+          </div>
+
+          {/* Section Checkboxes */}
+          <div className="p-4 border-b border-border">
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted mb-2">
+              Sections
+            </h3>
+            <div className="space-y-1.5">
+              {[
+                { key: "intro", label: "Intro" },
+                { key: "topics", label: "Topic sections" },
+                { key: "quotes", label: "Pull quotes" },
+                { key: "links", label: "Links" },
+                { key: "closing", label: "Closing POV" },
+              ].map(({ key, label }) => (
+                <label key={key} className={`flex items-center gap-2 py-1 cursor-pointer ${newsletter ? "opacity-50 cursor-not-allowed" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={sections.includes(key)}
+                    disabled={!!newsletter}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSections((prev) => [...prev, key]);
+                      } else {
+                        setSections((prev) => prev.filter((s) => s !== key));
+                      }
+                    }}
+                    className="accent-accent"
+                  />
+                  <span className="text-sm text-text-secondary">{label}</span>
+                </label>
+              ))}
             </div>
           </div>
 
@@ -345,6 +402,28 @@ export default function NewsletterPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Substack Notes (collapsible, shown on main tab) */}
+                {activeTab === "main" && newsletter.notes_content && !editing && (
+                  <div className="mt-6 border-t border-border pt-4">
+                    <button
+                      onClick={() => setNotesExpanded(!notesExpanded)}
+                      className="flex items-center gap-2 text-sm font-medium text-text-secondary hover:text-text-primary transition-colors mb-3"
+                    >
+                      {notesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      Substack Notes
+                    </button>
+                    {notesExpanded && (
+                      <div className="bg-bg-elevated border border-border rounded-lg p-4">
+                        <div className="prose prose-invert prose-sm max-w-none">
+                          <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
+                            {renderMarkdown(newsletter.notes_content)}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ) : null}
@@ -373,7 +452,7 @@ function renderMarkdown(content: string) {
     }
     if (line.startsWith("> ")) {
       return (
-        <blockquote key={i} className="border-l-2 border-accent/30 pl-3 italic text-text-secondary my-2">
+        <blockquote key={i} className="border-l-3 border-accent/40 pl-4 py-2 my-3 bg-accent/5 rounded-r-lg italic text-text-secondary">
           {line.slice(2)}
         </blockquote>
       );

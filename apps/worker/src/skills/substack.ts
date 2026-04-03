@@ -4,27 +4,57 @@ import type { callClaude as ClaudeFn } from "../lib/claude";
 interface SubstackPayload {
   episodeId: string;
   showId: string;
+  tone?: "default" | "formal" | "shorter";
+  sections?: string[]; // e.g. ["intro", "topics", "pull_quotes", "links", "closing"]
 }
 
-const SYSTEM_PROMPT = `You are a podcast newsletter writer. Your job is to transform a podcast episode into a compelling Substack newsletter post.
+const SYSTEM_PROMPT = `You are a podcast newsletter writer. Transform podcast episodes into compelling Substack posts.
 
-The newsletter should NOT be a transcript summary. It should be:
-- A standalone piece of writing that captures the energy and insights of the episode
-- Written in the show's voice (casual, sharp, builder-focused)
-- Structured for email readers who may not have watched the episode
-- Full of specific insights, hot takes, and actionable ideas from the conversation
+## Writing Rules (STRICT)
+- The newsletter is NOT a transcript summary. It's a standalone piece of writing.
+- Write in the show's voice: casual, sharp, builder-focused, slightly contrarian.
+- No em-dashes. Use commas or full stops.
+- No hype words: "groundbreaking", "game-changing", "revolutionary", "vibrant", "stunning"
+- Direct voice. Like the hosts talk, not a press release.
+- Prose only. No bullet points in the body sections.
+- Reference all three hosts where relevant. Don't make it a one-host show.
+
+## Tone Variants
+- "default": Natural show voice. Conversational but smart.
+- "formal": Slightly more polished. Same personality, tighter prose.
+- "shorter": Half the length. Only the sharpest insights. Cut everything that isn't essential.
+
+## Newsletter Structure
+5 sections per episode:
+1. Hook/intro paragraph (make readers want to keep reading)
+2-4. Topic sections covering the biggest ideas (each 150-250 words)
+5. Closing POV (host perspective + CTA: watch episode, reply with thoughts)
+
+Each section should include:
+- Specific insights, hot takes, and actionable ideas from the conversation
+- Host perspectives and disagreements where relevant
+- Embedded tweet URLs on their own line (Substack auto-embeds them)
+- Pull quotes as blockquotes (> prefix)
+- Inline links to sources/tools mentioned
+
+## Substack Notes
+Additionally, generate 3-5 short notes for the Substack Notes feed:
+- One idea per note
+- Distributed across hosts (not all one person)
+- Each note is a standalone micro-post
+- Punchy, conversational, 1-3 sentences
+
+## Subject Lines
+Generate 3 subject line options:
+1. Curiosity gap style
+2. Bold claim style
+3. Question style
 
 Output ONLY valid JSON:
 {
-  "main_content": "Full markdown newsletter post. Use ## for sections, **bold** for emphasis, > for pull quotes. Include:\n- Hook/intro paragraph that makes readers want to keep reading\n- 3-4 sections covering the biggest ideas from the episode\n- Host perspectives and disagreements where relevant\n- Specific examples, numbers, or tools mentioned\n- Closing CTA (watch the full episode, reply with thoughts, etc.)\n\nTarget: 800-1200 words.",
-  "notes_content": "Bullet-point show notes in markdown:\n- Timestamps with descriptions\n- Links mentioned in the episode\n- Tools, projects, or resources referenced\n- Guest info (if applicable)",
-  "subject_options": [
-    "Subject line 1 (curiosity gap)",
-    "Subject line 2 (bold claim)",
-    "Subject line 3 (question)",
-    "Subject line 4 (number-driven)",
-    "Subject line 5 (contrarian take)"
-  ]
+  "main_content": "Full markdown newsletter post. 800-1200 words for default, 400-600 for shorter.",
+  "notes_content": "Markdown with ## headers separating each note. 3-5 notes total.",
+  "subject_options": ["Subject 1", "Subject 2", "Subject 3"]
 }`;
 
 export async function execute(
@@ -50,6 +80,13 @@ export async function execute(
     .order("generated_at", { ascending: false })
     .limit(1)
     .single();
+
+  // Fetch docket topics for link cross-referencing
+  const { data: docketTopics } = await supabase
+    .from("docket_topics")
+    .select("title, context, sources, status")
+    .eq("episode_id", payload.episodeId)
+    .eq("status", "in");
 
   if (!transcript?.clean_content) {
     throw new Error("No processed transcript found for this episode");
@@ -82,10 +119,20 @@ export async function execute(
     }
   }
 
+  // Build user prompt with all available context
+  const tone = payload.tone || "default";
+  const sections = payload.sections || ["intro", "topics", "pull_quotes", "links", "closing"];
+
   let userPrompt = `Write a Substack newsletter for this podcast episode.\n\n`;
+  userPrompt += `Tone: ${tone}\n`;
+  userPrompt += `Include these sections: ${sections.join(", ")}\n\n`;
 
   if (masterOutput?.content) {
-    userPrompt += `Episode analysis (use this for structure and key points):\n${JSON.stringify(masterOutput.content, null, 2)}\n\n`;
+    userPrompt += `Episode analysis (use for structure and key points):\n${JSON.stringify(masterOutput.content, null, 2)}\n\n`;
+  }
+
+  if (docketTopics && docketTopics.length > 0) {
+    userPrompt += `Docket topics with sources (cross-reference for links):\n${JSON.stringify(docketTopics, null, 2)}\n\n`;
   }
 
   userPrompt += `Full transcript:\n${transcript.clean_content}`;
@@ -120,10 +167,9 @@ export async function execute(
     .select()
     .single();
 
-  // Newsletter doesn't advance episode status (parallel output)
-
   return {
     newsletterId: saved?.id,
     subjectCount: (newsletter.subject_options as string[])?.length || 0,
+    tone,
   };
 }

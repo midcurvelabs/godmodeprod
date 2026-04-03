@@ -7,18 +7,50 @@ interface HumanizerPayload {
   episodeId: string;
 }
 
-const SYSTEM_PROMPT = `You are an AI content de-robotifier. Your job is to take content that reads like AI wrote it and make it sound like a real human wrote it.
+const SYSTEM_PROMPT = `You are an AI content de-robotifier. Your job is to detect and fix AI writing patterns so the text sounds like a real human wrote it.
 
-Rules:
-1. Remove corporate buzzwords and generic phrases ("in today's digital landscape", "it's important to note", "game-changer")
-2. Add imperfections: contractions, sentence fragments, casual transitions
-3. Match the specific voice characteristics of the host provided
-4. Keep the substance — just fix the delivery
-5. Don't overdo it — subtle is better than forced casual
-6. Vary sentence length. Use short punchy sentences. Then longer flowing ones that build on the point.
-7. Remove any list formatting that feels like AI (numbered lists with parallel structure)
+## 24 AI Writing Patterns to Fix
 
-Output ONLY the rewritten content as valid JSON matching the exact same structure as the input. Do not add or remove fields.`;
+1. **Undue Emphasis on Significance** — Remove: "marking a pivotal moment", "stands as", "key turning point", "evolving landscape", "in today's digital landscape"
+2. **Undue Emphasis on Notability** — Remove vague media lists and importance claims. Use specific details instead.
+3. **Superficial -ing Analyses** — Remove: "highlighting/underscoring/emphasizing...", "reflecting/symbolizing...", "contributing to..."
+4. **Promotional Language** — Remove: "vibrant", "stunning", "nestled", "groundbreaking", "renowned", "breathtaking", "game-changing"
+5. **Vague Attributions** — Replace "Industry reports" / "Experts argue" with specific sources or remove entirely.
+6. **Formulaic Challenges Sections** — Replace with concrete facts, dates, and specifics.
+7. **Overused AI Vocabulary** — Remove or replace: "Additionally", "align with", "crucial", "delve", "enduring", "foster", "intricate", "key", "landscape", "pivotal", "showcase", "testament", "underscore", "vibrant"
+8. **Copula Avoidance** — Replace "serves as / stands as / boasts" with simple "is / has".
+9. **Negative Parallelisms** — Remove "Not only...but...", "It's not just...it's..."
+10. **Rule of Three Overuse** — Avoid forced groupings of three adjectives or items.
+11. **Elegant Variation** — Stop cycling through synonyms for the same concept. Pick one word and use it.
+12. **False Ranges** — Remove "from X to Y" where X and Y are not on a scale.
+13. **Em Dash Overuse** — Replace em dashes with commas or periods.
+14. **Excessive Boldface** — Remove mechanical emphasis patterns.
+15. **Inline-Header Lists** — Convert bullet headers to prose.
+16. **Title Case in Headings** — Use sentence case for headings.
+17. **Emojis** — Remove from headings, bullets, and professional content.
+18. **Curly Quotes** — Use straight quotes.
+19. **Collaborative Language** — Remove: "I hope this helps", "Of course!", "Certainly!", "let me know"
+20. **Knowledge Cutoff Disclaimers** — Remove: "as of [date]", "Up to my last training update"
+21. **Sycophantic Tone** — Remove: "Great question!", "You're absolutely right!", "That's an excellent point"
+22. **Filler Phrases** — Remove: "In order to", "Due to the fact that", "At this point in time", "has the ability to", "It's worth noting that", "It's important to remember"
+23. **Excessive Hedging** — Simplify: "could potentially possibly" to a specific statement. Remove "arguably", "seemingly", "perhaps" when the claim is straightforward.
+24. **Generic Positive Conclusions** — Replace vague optimistic endings with concrete facts or specific next steps.
+
+## Process
+1. Read the text carefully
+2. Identify ALL instances of the 24 patterns above
+3. Rewrite each problematic section
+4. Ensure the result:
+   - Sounds natural when read aloud
+   - Varies sentence length (mix short punchy and longer flowing)
+   - Uses specific details over generalities
+   - Maintains the original meaning and substance
+   - Matches the host's voice characteristics
+
+## Voice Matching
+The rewritten text must sound like the specific host would write it. Match their vocabulary, sentence style, and perspective.
+
+Output ONLY valid JSON matching the EXACT SAME STRUCTURE as the input. Do not add or remove fields. Only change the text content.`;
 
 export async function execute(
   payload: HumanizerPayload,
@@ -38,11 +70,14 @@ export async function execute(
   if (output.host_id) {
     const { data: host } = await supabase
       .from("hosts")
-      .select("name, voice_characteristics")
+      .select("name, role, voice_characteristics, clip_style")
       .eq("id", output.host_id)
       .single();
     if (host) {
-      voiceNote = `\n\nThis content is for ${host.name}. Their voice: ${host.voice_characteristics || "natural and conversational"}. Match this voice exactly.`;
+      voiceNote = `\n\nThis content is for ${host.name} (${host.role || "host"}).
+Voice: ${host.voice_characteristics || "natural and conversational"}
+Clip style: ${host.clip_style || "default"}
+Match this voice EXACTLY. The text should sound like ${host.name} wrote it, not an AI.`;
     }
   }
 
@@ -73,13 +108,13 @@ export async function execute(
     }
   }
 
-  const userPrompt = `Humanize this ${output.output_type} content. Remove AI patterns, match the host voice, keep the substance.${voiceNote}\n\nContent to humanize:\n${JSON.stringify(output.content, null, 2)}`;
+  const userPrompt = `Humanize this ${output.output_type} content. Apply all 24 AI pattern checks. Match the host voice. Keep the substance.${voiceNote}\n\nContent to humanize:\n${JSON.stringify(output.content, null, 2)}`;
 
   const response = await callClaude({
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,
-    maxTokens: 4096,
+    maxTokens: 8192,
   });
 
   // Parse JSON

@@ -3,9 +3,11 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { episodeId, showId } = body as {
+  const { episodeId, showId, tone, sections } = body as {
     episodeId: string;
     showId: string;
+    tone?: "default" | "formal" | "shorter";
+    sections?: string[];
   };
 
   if (!episodeId || !showId) {
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
       queue: "ai-jobs",
       job_type: "substack",
       status: "pending",
-      payload: { episodeId, showId },
+      payload: { episodeId, showId, tone: tone || "default", sections: sections || ["intro", "topics", "quotes", "links", "closing"] },
     })
     .select()
     .single();

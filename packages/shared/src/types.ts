@@ -286,3 +286,144 @@ export interface SkillContext {
   episode_number: number;
   episode_id: string;
 }
+
+// --- Rich Content Types (Phase 2: Content Engine) ---
+
+export type ClipPriority = 1 | 2 | 3;
+
+export type ClipCriteria =
+  | "strong_hook"
+  | "personal_result"
+  | "news_peg"
+  | "named_concept"
+  | "entertainment";
+
+export interface AnalysisClipCandidate {
+  host: string;
+  title: string;
+  hook: string;
+  start_ref: string;
+  end_ref: string;
+  estimated_duration_seconds: number;
+  priority: ClipPriority;
+  platforms: string[];
+  why_it_works: string;
+  criteria_met: ClipCriteria[];
+}
+
+export interface AnalysisKeyMoment {
+  host: string;
+  timestamp: string;
+  description: string;
+  why_it_matters: string;
+  energy: "high" | "medium" | "low";
+  type: "hot_take" | "insight" | "debate" | "funny" | "emotional" | "educational";
+}
+
+export interface AnalysisTheme {
+  name: string;
+  summary: string;
+  hosts_involved: string[];
+  related_moment_indices: number[];
+}
+
+export interface AnalysisQuotableLine {
+  quote: string;
+  host: string;
+  context: string;
+  platforms: string[];
+}
+
+export interface AnalysisTopicSegment {
+  topic: string;
+  start_ref: string;
+  end_ref: string;
+  summary: string;
+  key_takeaway: string;
+  hosts_present: string[];
+}
+
+export interface AnalysisContentAngle {
+  angle: string;
+  best_for: "twitter" | "linkedin" | "youtube" | "newsletter";
+  host_focus: string;
+}
+
+export interface MasterAnalysis {
+  episode_summary: string;
+  key_moments: AnalysisKeyMoment[];
+  clip_candidates: AnalysisClipCandidate[];
+  themes: AnalysisTheme[];
+  quotable_lines: AnalysisQuotableLine[];
+  topic_segments: AnalysisTopicSegment[];
+  content_angles: AnalysisContentAngle[];
+  host_clip_summary: Record<string, { total_clips: number; priority_1: number; priority_2: number; priority_3: number }>;
+}
+
+export interface ShortsCaption {
+  clip_ref: string;
+  hook: string;
+  tiktok: string;
+  instagram: string;
+  youtube_shorts: string;
+  companies_tagged: string[];
+}
+
+export interface TwitterStandaloneTweet {
+  text: string;
+  type: "text_only" | "clip_paired";
+  clip_ref?: string;
+}
+
+export interface TwitterHostOutput {
+  thread: string[];
+  standalone_tweets: TwitterStandaloneTweet[];
+}
+
+export interface LinkedInHostOutput {
+  post: string;
+  angle: "builder" | "product" | "tech";
+  char_count: number;
+}
+
+export interface YouTubeSegment {
+  title_options: string[];
+  description: string;
+  start_ref: string;
+  end_ref: string;
+  estimated_duration_minutes: number;
+  chapters: Array<{ timestamp: string; title: string }>;
+  thumbnail_direction: {
+    host: string;
+    expression: "surprised" | "laughing" | "serious" | "pointing";
+    text_overlay: string;
+  };
+}
+
+export interface ScheduleItem {
+  platform: string;
+  content_type: string;
+  clip_ref: string;
+  host: string;
+  time: string;
+}
+
+export interface PostingSchedule {
+  day_1: ScheduleItem[];
+  day_2: ScheduleItem[];
+  day_3: ScheduleItem[];
+  day_4: ScheduleItem[];
+  day_5: ScheduleItem[];
+  day_6: ScheduleItem[];
+  day_7: ScheduleItem[];
+}
+
+export interface ClipTimestamp {
+  title: string;
+  host: string;
+  start_ref: string;
+  end_ref: string;
+  hook: string;
+  priority: ClipPriority;
+  platforms: string[];
+}
