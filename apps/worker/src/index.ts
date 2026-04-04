@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import { connection } from "./lib/redis";
+import { startJobPoller, stopJobPoller } from "./lib/job-poller";
 
 console.log("Starting GodModeProd worker...");
 
@@ -59,11 +60,14 @@ for (const worker of workers) {
 
 async function shutdown() {
   console.log("Shutting down workers...");
+  stopJobPoller();
   await Promise.all(workers.map((w) => w.close()));
   process.exit(0);
 }
 
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+startJobPoller();
 
 console.log("Worker ready. Listening for jobs on 4 queues.");

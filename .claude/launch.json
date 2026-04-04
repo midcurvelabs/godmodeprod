@@ -3,10 +3,9 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "/opt/homebrew/bin/pnpm",
-      "runtimeArgs": ["--filter", "web", "dev"],
-      "port": 3000,
-      "autoPort": true
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["apps/web/dev.sh"],
+      "port": 3333
     }
   ]
 }
