@@ -3,8 +3,14 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "bash",
-      "runtimeArgs": ["/Users/rik/Documents/rik-docs/02_projects/GodModePod/godmodeprod/apps/web/dev.sh"],
+      "runtimeExecutable": "/opt/homebrew/bin/node",
+      "runtimeArgs": [
+        "/Users/rik/Documents/rik-docs/02_projects/GodModePod/godmodeprod/apps/web/node_modules/next/dist/bin/next",
+        "dev",
+        "--port",
+        "3333"
+      ],
+      "cwd": "/Users/rik/Documents/rik-docs/02_projects/GodModePod/godmodeprod/apps/web",
       "port": 3333
     }
   ]

@@ -210,8 +210,9 @@ export default function SettingsPage() {
     flashSaved();
   }
 
-  async function syncHostsContext() {
+  async function syncHostsContext(nextHosts?: HostFormData[]) {
     if (!currentShow) return;
+    const source = nextHosts ?? hosts;
     await fetch("/api/show-context", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -219,7 +220,7 @@ export default function SettingsPage() {
         showId: currentShow.id,
         contextType: "hosts",
         content: {
-          hosts: hosts.map((h) => ({
+          hosts: source.map((h) => ({
             name: h.name,
             role: h.role,
             platforms: h.platforms,
@@ -235,6 +236,7 @@ export default function SettingsPage() {
     if (!currentShow) return;
     setSaving(true);
 
+    let nextHosts = hosts;
     if (host.id) {
       const res = await fetch(`/api/hosts/${host.id}`, {
         method: "PATCH",
@@ -250,13 +252,10 @@ export default function SettingsPage() {
       });
       const json = await res.json();
       if (json.host) {
-        setHosts((prev) =>
-          prev.map((h) =>
-            h.id === host.id
-              ? { ...host, id: host.id }
-              : h
-          )
+        nextHosts = hosts.map((h) =>
+          h.id === host.id ? { ...host, id: host.id } : h
         );
+        setHosts(nextHosts);
       }
     } else {
       const res = await fetch("/api/hosts", {
@@ -275,8 +274,8 @@ export default function SettingsPage() {
       });
       const json = await res.json();
       if (json.host) {
-        setHosts((prev) => [
-          ...prev,
+        nextHosts = [
+          ...hosts,
           {
             id: json.host.id,
             name: host.name,
@@ -286,7 +285,8 @@ export default function SettingsPage() {
             clipStyle: host.clipStyle,
             photoUrl: host.photoUrl,
           },
-        ]);
+        ];
+        setHosts(nextHosts);
       }
     }
 
@@ -295,18 +295,19 @@ export default function SettingsPage() {
     setSaving(false);
     flashSaved();
 
-    // Rebuild hosts context
-    await syncHostsContext();
+    // Rebuild hosts context with the fresh list (state update not yet applied)
+    await syncHostsContext(nextHosts);
   }
 
   async function deleteHost(hostId: string) {
     if (!currentShow) return;
     await fetch(`/api/hosts/${hostId}`, { method: "DELETE" });
-    setHosts((prev) => prev.filter((h) => h.id !== hostId));
+    const nextHosts = hosts.filter((h) => h.id !== hostId);
+    setHosts(nextHosts);
     if (editingHost?.id === hostId) setEditingHost(null);
 
-    // Rebuild hosts context
-    await syncHostsContext();
+    // Rebuild hosts context with the fresh list
+    await syncHostsContext(nextHosts);
   }
 
   const tabs = [
