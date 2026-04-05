@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { SKILL_REGISTRY } from "@godmodeprod/shared";
 import type { SkillName } from "@godmodeprod/shared";
 
 export async function POST(request: Request) {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     .insert({
       show_id: showId,
       episode_id: episodeId || null,
-      queue: "ai-jobs",
+      queue: SKILL_REGISTRY[skillName as keyof typeof SKILL_REGISTRY]?.queue || "ai-jobs",
       job_type: skillName,
       status: "pending",
       payload,

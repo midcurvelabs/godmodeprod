@@ -14,51 +14,44 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseServer();
   const { data, error } = await supabase
-    .from("hosts")
+    .from("show_context")
     .select("*")
-    .eq("show_id", showId)
-    .order("sort_order");
+    .eq("show_id", showId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ hosts: data || [] });
+  return NextResponse.json({ contexts: data || [] });
 }
 
-export async function POST(request: Request) {
+export async function PUT(request: Request) {
   const body = await request.json();
-  const { showId, name, role, platforms, voiceCharacteristics, clipStyle, photoUrl, sortOrder } = body as {
+  const { showId, contextType, content } = body as {
     showId: string;
-    name: string;
-    role?: string;
-    platforms?: Record<string, string>;
-    voiceCharacteristics?: string;
-    clipStyle?: string;
-    photoUrl?: string;
-    sortOrder?: number;
+    contextType: "soul" | "hosts" | "brand" | "workflow";
+    content: Record<string, unknown>;
   };
 
-  if (!showId || !name) {
+  if (!showId || !contextType || !content) {
     return NextResponse.json(
-      { error: "showId and name are required" },
+      { error: "showId, contextType, and content are required" },
       { status: 400 }
     );
   }
 
   const supabase = getSupabaseServer();
   const { data, error } = await supabase
-    .from("hosts")
-    .insert({
-      show_id: showId,
-      name,
-      role: role || "",
-      platforms: platforms || {},
-      voice_characteristics: voiceCharacteristics || "",
-      clip_style: clipStyle || "",
-      photo_url: photoUrl || null,
-      sort_order: sortOrder ?? 0,
-    })
+    .from("show_context")
+    .upsert(
+      {
+        show_id: showId,
+        context_type: contextType,
+        content,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "show_id,context_type" }
+    )
     .select()
     .single();
 
@@ -66,5 +59,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ host: data });
+  return NextResponse.json({ context: data });
 }

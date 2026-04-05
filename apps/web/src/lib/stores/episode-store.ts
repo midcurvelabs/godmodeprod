@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { Episode, Show } from "@godmodeprod/shared";
+import type { Episode, Show, EpisodeStatus } from "@godmodeprod/shared";
 
 interface EpisodeStore {
   currentShow: Show | null;
@@ -23,6 +23,7 @@ interface EpisodeStore {
     subtitle?: string;
     recordingDate?: string;
   }) => Promise<Episode | null>;
+  updateEpisodeStatus: (episodeId: string, status: EpisodeStatus) => Promise<boolean>;
 }
 
 export const useEpisodeStore = create<EpisodeStore>((set, get) => ({
@@ -68,5 +69,28 @@ export const useEpisodeStore = create<EpisodeStore>((set, get) => ({
       return json.episode;
     }
     return null;
+  },
+  updateEpisodeStatus: async (episodeId: string, status: EpisodeStatus) => {
+    const res = await fetch(`/api/episodes/${episodeId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    const json = await res.json();
+    if (json.episode) {
+      // Update in episodes list
+      set({
+        episodes: get().episodes.map((e) =>
+          e.id === episodeId ? { ...e, status: json.episode.status } : e
+        ),
+      });
+      // Update currentEpisode if it's the one being changed
+      const current = get().currentEpisode;
+      if (current?.id === episodeId) {
+        set({ currentEpisode: { ...current, status: json.episode.status } });
+      }
+      return true;
+    }
+    return false;
   },
 }));

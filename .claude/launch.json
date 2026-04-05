@@ -4,7 +4,7 @@
     {
       "name": "web",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["apps/web/dev.sh"],
+      "runtimeArgs": ["/Users/rik/Documents/rik-docs/02_projects/GodModePod/godmodeprod/apps/web/dev.sh"],
       "port": 3333
     }
   ]

@@ -13,6 +13,7 @@ import {
   User,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
+import { useJobPoll } from "@/lib/hooks/use-job-poll";
 import type { DocketTopic, ResearchBrief } from "@godmodeprod/shared";
 
 interface BriefSection {
@@ -39,6 +40,34 @@ export default function ResearchPage() {
   const [episodeContext, setEpisodeContext] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generatingStep, setGeneratingStep] = useState("");
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
+
+  const { status: jobStatus } = useJobPoll({
+    jobId: pollingJobId,
+    enabled: generating,
+    onComplete: async () => {
+      // Re-fetch the brief
+      if (currentEpisode) {
+        const briefRes = await fetch(`/api/research?episode_id=${currentEpisode.id}`);
+        const briefJson = await briefRes.json();
+        if (briefJson.brief) setBrief(briefJson.brief);
+      }
+      setGenerating(false);
+      setGeneratingStep("");
+      setPollingJobId(null);
+    },
+    onFailed: (err) => {
+      setGeneratingStep(`Failed: ${err}`);
+      setGenerating(false);
+      setPollingJobId(null);
+    },
+  });
+
+  // Update step text based on real job status
+  useEffect(() => {
+    if (jobStatus === "pending") setGeneratingStep("Queued — waiting for worker...");
+    else if (jobStatus === "running") setGeneratingStep("Generating research brief...");
+  }, [jobStatus]);
 
   const fetchData = useCallback(async () => {
     if (!currentEpisode || !currentShow) return;
@@ -79,10 +108,17 @@ export default function ResearchPage() {
     });
   }
 
+  const { updateEpisodeStatus } = useEpisodeStore();
+
   async function generateBrief() {
     if (!currentShow || !currentEpisode || selectedTopicIds.size === 0) return;
     setGenerating(true);
     setGeneratingStep("Preparing topics...");
+
+    // Transition episode to research_running
+    if (currentEpisode.status === "docket_locked") {
+      updateEpisodeStatus(currentEpisode.id, "research_running");
+    }
 
     // Dispatch job to worker
     const selectedTopics = topics.filter((t) => selectedTopicIds.has(t.id));
@@ -112,23 +148,12 @@ export default function ResearchPage() {
 
     const json = await res.json();
     if (json.job) {
-      // Simulate progress steps while waiting
-      const steps = selectedTopics.map((t) => `Researching: ${t.title}...`);
-      for (const step of steps) {
-        setGeneratingStep(step);
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-      setGeneratingStep("Compiling brief...");
-      await new Promise((r) => setTimeout(r, 1000));
-
-      // Refresh brief
-      const briefRes = await fetch(`/api/research?episode_id=${currentEpisode.id}`);
-      const briefJson = await briefRes.json();
-      if (briefJson.brief) setBrief(briefJson.brief);
+      setPollingJobId(json.job.id);
+      setGeneratingStep("Queued — waiting for worker...");
+    } else {
+      setGenerating(false);
+      setGeneratingStep("");
     }
-
-    setGenerating(false);
-    setGeneratingStep("");
   }
 
   function copyAll() {

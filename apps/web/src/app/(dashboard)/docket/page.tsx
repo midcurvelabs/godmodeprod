@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Clock,
   Loader2,
+  Lock,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -47,6 +48,15 @@ export default function DocketPage() {
   const [commentText, setCommentText] = useState("");
   const [comments, setComments] = useState<Array<{ id: string; content: string; created_at: string }>>([]);
 
+  const { updateEpisodeStatus } = useEpisodeStore();
+
+  // Auto-transition to docket_open when episode is in 'created' state
+  useEffect(() => {
+    if (currentEpisode && currentEpisode.status === "created") {
+      updateEpisodeStatus(currentEpisode.id, "docket_open");
+    }
+  }, [currentEpisode, updateEpisodeStatus]);
+
   const fetchTopics = useCallback(async () => {
     if (!currentEpisode) return;
     setLoading(true);
@@ -70,22 +80,46 @@ export default function DocketPage() {
     }
   }, [selectedTopic]);
 
+  function isUrl(text: string): boolean {
+    return /^https?:\/\//i.test(text.trim());
+  }
+
   async function handleQuickAdd() {
     if (!quickAddText.trim() || !currentEpisode || !currentShow) return;
     setAdding(true);
+    const inputText = quickAddText.trim();
     const res = await fetch("/api/docket/topics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         episodeId: currentEpisode.id,
         showId: currentShow.id,
-        title: quickAddText.trim(),
+        title: inputText,
       }),
     });
     const json = await res.json();
     if (json.topic) {
       setTopics((prev) => [...prev, json.topic]);
       setQuickAddText("");
+
+      // Auto-enrich if input looks like a URL
+      if (isUrl(inputText)) {
+        fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            skillName: "docket-add",
+            showId: currentShow.id,
+            episodeId: currentEpisode.id,
+            payload: {
+              topicId: json.topic.id,
+              showId: currentShow.id,
+              episodeId: currentEpisode.id,
+              url: inputText,
+            },
+          }),
+        });
+      }
     }
     setAdding(false);
   }
@@ -389,14 +423,29 @@ export default function DocketPage() {
             )}
           </div>
 
-          {/* Time estimate */}
-          <div className="p-3 border-t border-border flex items-center justify-between">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-text-muted flex items-center gap-1.5">
-              <Clock size={12} /> Est. Time
-            </span>
-            <span className="text-sm font-mono text-text-secondary">
-              {lineupTopics.length * 8}–{lineupTopics.length * 12} min
-            </span>
+          {/* Time estimate + Lock */}
+          <div className="p-3 border-t border-border space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+                <Clock size={12} /> Est. Time
+              </span>
+              <span className="text-sm font-mono text-text-secondary">
+                {lineupTopics.length * 8}–{lineupTopics.length * 12} min
+              </span>
+            </div>
+            {lineupTopics.length > 0 && currentEpisode.status !== "docket_locked" && (
+              <button
+                onClick={() => updateEpisodeStatus(currentEpisode.id, "docket_locked")}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-warning/15 text-warning text-sm font-medium hover:bg-warning/25 transition-colors"
+              >
+                <Lock size={14} /> Lock Docket
+              </button>
+            )}
+            {currentEpisode.status === "docket_locked" && (
+              <div className="flex items-center justify-center gap-2 py-2 rounded-lg bg-warning/10 text-warning/70 text-sm">
+                <Lock size={14} /> Docket Locked
+              </div>
+            )}
           </div>
         </div>
       </div>

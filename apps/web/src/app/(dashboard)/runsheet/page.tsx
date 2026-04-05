@@ -14,6 +14,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
+import { useJobPoll } from "@/lib/hooks/use-job-poll";
 import type { Runsheet } from "@godmodeprod/shared";
 
 interface RunsheetSegment {
@@ -40,7 +41,22 @@ export default function RunsheetPage() {
   const [runsheet, setRunsheet] = useState<Runsheet | null>(null);
   const [activeSegment, setActiveSegment] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
   const [printView, setPrintView] = useState(false);
+
+  const { status: jobStatus } = useJobPoll({
+    jobId: pollingJobId,
+    enabled: generating,
+    onComplete: async () => {
+      await fetchRunsheet();
+      setGenerating(false);
+      setPollingJobId(null);
+    },
+    onFailed: () => {
+      setGenerating(false);
+      setPollingJobId(null);
+    },
+  });
 
   const fetchRunsheet = useCallback(async () => {
     if (!currentEpisode) return;
@@ -56,7 +72,7 @@ export default function RunsheetPage() {
   async function generateRunsheet() {
     if (!currentShow || !currentEpisode) return;
     setGenerating(true);
-    await fetch("/api/jobs", {
+    const res = await fetch("/api/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -66,11 +82,12 @@ export default function RunsheetPage() {
         payload: {},
       }),
     });
-
-    // Simulate wait
-    await new Promise((r) => setTimeout(r, 3000));
-    await fetchRunsheet();
-    setGenerating(false);
+    const json = await res.json();
+    if (json.job) {
+      setPollingJobId(json.job.id);
+    } else {
+      setGenerating(false);
+    }
   }
 
   function copyAll() {
@@ -181,7 +198,11 @@ export default function RunsheetPage() {
       ) : generating ? (
         <div className="bg-bg-surface border border-border rounded-lg p-12 text-center">
           <Loader2 size={24} className="animate-spin text-accent mx-auto mb-3" />
-          <p className="text-sm text-text-secondary">Generating runsheet...</p>
+          <p className="text-sm text-text-secondary">
+            {jobStatus === "pending" && "Queued — waiting for worker..."}
+            {jobStatus === "running" && "Generating runsheet..."}
+            {!jobStatus && "Submitting job..."}
+          </p>
         </div>
       ) : (
         <div className="flex gap-4 h-[calc(100vh-220px)]">
