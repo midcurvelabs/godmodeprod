@@ -36,6 +36,38 @@ const DEFAULT_SEGMENTS = [
   { name: "The Close", time_label: "55:00–60:00", duration_minutes: 5 },
 ];
 
+// LLMs may return seed_points/debate_positions as objects ({host: [...]})
+// instead of arrays ([{host, points}]). Normalize to the array format the UI expects.
+function normalizeSegment(raw: Record<string, unknown>): RunsheetSegment {
+  let seedPoints: RunsheetSegment["seed_points"] = [];
+  if (Array.isArray(raw.seed_points)) {
+    seedPoints = raw.seed_points;
+  } else if (raw.seed_points && typeof raw.seed_points === "object") {
+    seedPoints = Object.entries(raw.seed_points as Record<string, string[]>).map(
+      ([host, points]) => ({ host: host.charAt(0).toUpperCase() + host.slice(1), points })
+    );
+  }
+
+  let debatePositions: RunsheetSegment["debate_positions"] = [];
+  if (Array.isArray(raw.debate_positions)) {
+    debatePositions = raw.debate_positions;
+  } else if (raw.debate_positions && typeof raw.debate_positions === "object") {
+    debatePositions = Object.entries(raw.debate_positions as Record<string, string>).map(
+      ([host, position]) => ({ host: host.charAt(0).toUpperCase() + host.slice(1), position })
+    );
+  }
+
+  return {
+    name: (raw.name as string) || "",
+    time_label: (raw.time_label as string) || "",
+    duration_minutes: (raw.duration_minutes as number) || 0,
+    rik_intro: (raw.rik_intro as string) || "",
+    seed_points: seedPoints,
+    tight_questions: Array.isArray(raw.tight_questions) ? raw.tight_questions : [],
+    debate_positions: debatePositions,
+  };
+}
+
 export default function RunsheetPage() {
   const { currentShow, currentEpisode } = useEpisodeStore();
   const [runsheet, setRunsheet] = useState<Runsheet | null>(null);
@@ -109,8 +141,9 @@ export default function RunsheetPage() {
     );
   }
 
-  const segments: RunsheetSegment[] =
-    (runsheet?.content as { segments?: RunsheetSegment[] })?.segments || [];
+  const rawSegments =
+    (runsheet?.content as { segments?: Record<string, unknown>[] })?.segments || [];
+  const segments: RunsheetSegment[] = rawSegments.map(normalizeSegment);
 
   if (printView) {
     return (

@@ -13,8 +13,10 @@ import {
   Clock,
   Loader2,
   Lock,
+  Sparkles,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
+import { useJobPoll } from "@/lib/hooks/use-job-poll";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { DocketTopic, DocketTopicStatus } from "@godmodeprod/shared";
 
@@ -49,6 +51,49 @@ export default function DocketPage() {
   const [comments, setComments] = useState<Array<{ id: string; content: string; created_at: string }>>([]);
 
   const { updateEpisodeStatus } = useEpisodeStore();
+  const [summarising, setSummarising] = useState(false);
+  const [summaryJobId, setSummaryJobId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{ summary: string; narrative_arc: string; title_options: string[] } | null>(null);
+
+  const { status: summaryJobStatus } = useJobPoll({
+    jobId: summaryJobId,
+    enabled: summarising,
+    onComplete: async () => {
+      if (summaryJobId) {
+        const res = await fetch(`/api/jobs/${summaryJobId}`);
+        const json = await res.json();
+        if (json.job?.result) setSummary(json.job.result);
+      }
+      setSummarising(false);
+      setSummaryJobId(null);
+    },
+    onFailed: () => {
+      setSummarising(false);
+      setSummaryJobId(null);
+    },
+  });
+
+  async function handleSummarise() {
+    if (!currentShow || !currentEpisode) return;
+    setSummarising(true);
+    setSummary(null);
+    const res = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        skillName: "docket-summarise",
+        showId: currentShow.id,
+        episodeId: currentEpisode.id,
+        payload: {},
+      }),
+    });
+    const json = await res.json();
+    if (json.job) {
+      setSummaryJobId(json.job.id);
+    } else {
+      setSummarising(false);
+    }
+  }
 
   // Auto-transition to docket_open when episode is in 'created' state
   useEffect(() => {
@@ -446,7 +491,49 @@ export default function DocketPage() {
                 <Lock size={14} /> Docket Locked
               </div>
             )}
+            {lineupTopics.length > 0 && (
+              <button
+                onClick={handleSummarise}
+                disabled={summarising}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-accent/15 text-accent text-sm font-medium hover:bg-accent/25 transition-colors disabled:opacity-50"
+              >
+                {summarising ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    {summaryJobStatus === "running" ? "Summarising..." : "Queued..."}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} /> Summarise
+                  </>
+                )}
+              </button>
+            )}
           </div>
+
+          {/* Summary result */}
+          {summary && (
+            <div className="p-3 border-t border-border space-y-2 max-h-60 overflow-y-auto">
+              <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted">Summary</h4>
+              <p className="text-sm text-text-secondary leading-relaxed">{summary.summary}</p>
+              {summary.narrative_arc && (
+                <>
+                  <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mt-2">Arc</h4>
+                  <p className="text-xs text-text-muted leading-relaxed">{summary.narrative_arc}</p>
+                </>
+              )}
+              {summary.title_options && summary.title_options.length > 0 && (
+                <>
+                  <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mt-2">Title Ideas</h4>
+                  <ul className="space-y-1">
+                    {summary.title_options.map((t, i) => (
+                      <li key={i} className="text-xs text-accent">{t}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
