@@ -11,11 +11,12 @@ export async function processVideoJob(job: Job): Promise<unknown> {
 
   try {
     let result: unknown;
+    const skillPayload = { ...payload, showId, episodeId, jobId };
 
     switch (skillName) {
       case "mashup-maker": {
         const skill = await import("../skills/mashup-maker");
-        result = await skill.execute(payload);
+        result = await skill.execute(skillPayload);
         break;
       }
       default:
