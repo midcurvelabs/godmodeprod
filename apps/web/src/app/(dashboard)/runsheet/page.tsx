@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Copy,
   RefreshCw,
   Printer,
   Download,
+  FileText,
   Loader2,
   Mic,
   MessageSquare,
   HelpCircle,
   Swords,
   GripVertical,
+  ArrowRight,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { useJobPoll } from "@/lib/hooks/use-job-poll";
@@ -69,12 +72,14 @@ function normalizeSegment(raw: Record<string, unknown>): RunsheetSegment {
 }
 
 export default function RunsheetPage() {
+  const router = useRouter();
   const { currentShow, currentEpisode } = useEpisodeStore();
   const [runsheet, setRunsheet] = useState<Runsheet | null>(null);
   const [activeSegment, setActiveSegment] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [pollingJobId, setPollingJobId] = useState<string | null>(null);
   const [printView, setPrintView] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { status: jobStatus } = useJobPoll({
     jobId: pollingJobId,
@@ -84,7 +89,8 @@ export default function RunsheetPage() {
       setGenerating(false);
       setPollingJobId(null);
     },
-    onFailed: () => {
+    onFailed: (err) => {
+      setError(`Runsheet generation failed: ${err || "Unknown error"}`);
       setGenerating(false);
       setPollingJobId(null);
     },
@@ -103,6 +109,7 @@ export default function RunsheetPage() {
 
   async function generateRunsheet() {
     if (!currentShow || !currentEpisode) return;
+    setError(null);
     setGenerating(true);
     const res = await fetch("/api/jobs", {
       method: "POST",
@@ -135,8 +142,10 @@ export default function RunsheetPage() {
 
   if (!currentEpisode) {
     return (
-      <div className="text-center py-16 text-text-muted">
-        <p className="text-sm">Select an episode from the top bar.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <FileText size={40} strokeWidth={1} className="text-text-muted mb-3" />
+        <h2 className="font-display text-2xl text-text-secondary mb-1">No Episode Selected</h2>
+        <p className="text-sm text-text-muted">Select an episode from the top bar to view the runsheet.</p>
       </div>
     );
   }
@@ -215,6 +224,12 @@ export default function RunsheetPage() {
           Production document for EP {String(currentEpisode.episode_number).padStart(2, "0")}.
         </p>
       </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-error/10 border border-error/20 rounded-lg text-sm text-error">
+          {error}
+        </div>
+      )}
 
       {segments.length === 0 && !generating ? (
         <div className="bg-bg-surface border border-border rounded-lg p-12 text-center">
@@ -295,8 +310,25 @@ export default function RunsheetPage() {
               >
                 <Copy size={14} /> Copy All
               </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary transition-colors">
-                <Download size={14} /> Export PDF
+              <button
+                onClick={() => {
+                  const text = segments
+                    .map(
+                      (s) =>
+                        `## ${s.name} [${s.time_label}]\n\n### Rik Intro\n${s.rik_intro}\n\n### Seed Points\n${s.seed_points.map((sp) => `**${sp.host}:**\n${sp.points.map((p) => `- ${p}`).join("\n")}`).join("\n\n")}\n\n### Tight Questions\n${s.tight_questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}\n\n### Debate Positions\n${s.debate_positions.map((d) => `- ${d.host}: ${d.position}`).join("\n")}`
+                    )
+                    .join("\n\n---\n\n");
+                  const blob = new Blob([text], { type: "text/markdown" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `runsheet-ep${currentEpisode ? String(currentEpisode.episode_number).padStart(2, "0") : ""}.md`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary transition-colors"
+              >
+                <Download size={14} /> Download .md
               </button>
               <button
                 onClick={() => setPrintView(true)}
@@ -310,6 +342,12 @@ export default function RunsheetPage() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary transition-colors"
               >
                 <RefreshCw size={14} /> Regenerate
+              </button>
+              <button
+                onClick={() => router.push("/prep")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/15 text-accent text-sm hover:bg-accent/25 transition-colors"
+              >
+                <ArrowRight size={14} /> Go to Prep
               </button>
             </div>
 
