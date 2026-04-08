@@ -18,6 +18,7 @@ export async function processAiJob(job: Job): Promise<unknown> {
       case "tight-questions":
       case "runsheet":
       case "hook-writing":
+      case "slide-generation":
       case "repurpose-write":
       case "substack":
       case "humanizer": {

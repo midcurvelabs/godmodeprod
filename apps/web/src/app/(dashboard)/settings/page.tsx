@@ -21,6 +21,8 @@ interface ShowFormData {
   brandColor: string;
   logoUrl: string;
   themeMusicUrl: string;
+  slideFont: string;
+  slideLayout: string;
   description: string;
   tagline: string;
   tone: string;
@@ -57,6 +59,8 @@ export default function SettingsPage() {
     brandColor: "#E8001D",
     logoUrl: "",
     themeMusicUrl: "",
+    slideFont: "Inter",
+    slideLayout: "minimal",
     description: "",
     tagline: "",
     tone: "",
@@ -102,6 +106,13 @@ export default function SettingsPage() {
           tagline: ctx.content?.tagline || "",
           tone: ctx.content?.tone || "",
           audience: ctx.content?.audience || "",
+        }));
+      }
+      if (ctx.context_type === "brand") {
+        setShowForm((prev) => ({
+          ...prev,
+          slideFont: ctx.content?.slideFont || "Inter",
+          slideLayout: ctx.content?.slideLayout || "minimal",
         }));
       }
       if (ctx.context_type === "workflow") {
@@ -184,6 +195,8 @@ export default function SettingsPage() {
           brandColor: showForm.brandColor,
           logoUrl: showForm.logoUrl,
           themeMusicUrl: showForm.themeMusicUrl,
+          slideFont: showForm.slideFont,
+          slideLayout: showForm.slideLayout,
         },
       }),
     });
@@ -318,8 +331,10 @@ export default function SettingsPage() {
 
   if (!currentShow) {
     return (
-      <div className="text-center py-16 text-text-muted">
-        <p className="text-sm">Select a show to configure settings.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <Settings2 size={40} strokeWidth={1} className="text-text-muted mb-3" />
+        <h2 className="font-display text-2xl text-text-secondary mb-1">No Show Selected</h2>
+        <p className="text-sm text-text-muted">Select a show to configure settings.</p>
       </div>
     );
   }
@@ -482,6 +497,46 @@ export default function SettingsPage() {
                 placeholder="https://..."
                 className="w-full bg-bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
               />
+            </div>
+          </div>
+
+          {/* Slide Style */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
+                Slide Font
+              </label>
+              <select
+                value={showForm.slideFont}
+                onChange={(e) => setShowForm({ ...showForm, slideFont: e.target.value })}
+                className="w-full bg-bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent transition-colors"
+              >
+                <option value="Inter">Inter</option>
+                <option value="Space Grotesk">Space Grotesk</option>
+                <option value="JetBrains Mono">JetBrains Mono</option>
+                <option value="DM Sans">DM Sans</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
+                Slide Layout
+              </label>
+              <div className="flex gap-2">
+                {(["minimal", "bold", "data_heavy"] as const).map((layout) => (
+                  <button
+                    key={layout}
+                    type="button"
+                    onClick={() => setShowForm({ ...showForm, slideLayout: layout })}
+                    className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      showForm.slideLayout === layout
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border bg-bg-elevated text-text-secondary hover:text-text-primary"
+                    }`}
+                  >
+                    {layout === "data_heavy" ? "Data Heavy" : layout.charAt(0).toUpperCase() + layout.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

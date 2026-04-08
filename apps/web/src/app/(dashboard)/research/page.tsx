@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
+  BookOpen,
   Copy,
   Download,
-  RefreshCw,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -29,6 +30,7 @@ interface BriefSection {
 }
 
 export default function ResearchPage() {
+  const router = useRouter();
   const { currentShow, currentEpisode } = useEpisodeStore();
   const [topics, setTopics] = useState<DocketTopic[]>([]);
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
@@ -41,6 +43,7 @@ export default function ResearchPage() {
   const [generating, setGenerating] = useState(false);
   const [generatingStep, setGeneratingStep] = useState("");
   const [pollingJobId, setPollingJobId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { status: jobStatus } = useJobPoll({
     jobId: pollingJobId,
@@ -57,7 +60,7 @@ export default function ResearchPage() {
       setPollingJobId(null);
     },
     onFailed: (err) => {
-      setGeneratingStep(`Failed: ${err}`);
+      setError(`Research generation failed: ${err || "Unknown error"}`);
       setGenerating(false);
       setPollingJobId(null);
     },
@@ -112,6 +115,7 @@ export default function ResearchPage() {
 
   async function generateBrief() {
     if (!currentShow || !currentEpisode || selectedTopicIds.size === 0) return;
+    setError(null);
     setGenerating(true);
     setGeneratingStep("Preparing topics...");
 
@@ -168,10 +172,30 @@ export default function ResearchPage() {
     navigator.clipboard.writeText(text);
   }
 
+  function downloadMarkdown() {
+    const sections = (brief?.content as { sections?: BriefSection[] })?.sections;
+    if (!sections) return;
+    const text = sections
+      .map(
+        (s) =>
+          `# ${s.topic_title}\n\n## What Happened\n${s.what_happened}\n\n## Core Thesis\n${s.core_thesis}\n\n## Steel Man\n${s.steel_man}\n\n## Straw Man\n${s.straw_man}\n\n## Analogy\n${s.analogy}\n\n## Data Points\n${s.data_points.map((d) => `- ${d}`).join("\n")}\n\n## Sample Dialogue\n${s.sample_dialogue}\n\n## Connecting Threads\n${s.connecting_threads.map((t) => `- ${t}`).join("\n")}`
+      )
+      .join("\n\n---\n\n");
+    const blob = new Blob([text], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `research-brief-ep${currentEpisode ? String(currentEpisode.episode_number).padStart(2, "0") : ""}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!currentEpisode) {
     return (
-      <div className="text-center py-16 text-text-muted">
-        <p className="text-sm">Select an episode from the top bar to generate research.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <BookOpen size={40} strokeWidth={1} className="text-text-muted mb-3" />
+        <h2 className="font-display text-2xl text-text-secondary mb-1">No Episode Selected</h2>
+        <p className="text-sm text-text-muted">Select an episode from the top bar to generate research.</p>
       </div>
     );
   }
@@ -271,6 +295,11 @@ export default function ResearchPage() {
           </div>
 
           <div className="p-4 mt-auto">
+            {error && (
+              <div className="mb-3 p-3 bg-error/10 border border-error/20 rounded-lg text-sm text-error">
+                {error}
+              </div>
+            )}
             {generating ? (
               <div className="text-center py-3">
                 <Loader2 size={20} className="animate-spin text-accent mx-auto mb-2" />
@@ -300,14 +329,24 @@ export default function ResearchPage() {
               <Copy size={14} /> Copy All
             </button>
             <button
+              onClick={downloadMarkdown}
               disabled={sections.length === 0}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary hover:border-text-muted transition-colors disabled:opacity-50"
             >
               <Download size={14} /> Download .md
             </button>
             <div className="flex-1" />
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/15 text-accent text-sm hover:bg-accent/25 transition-colors">
-              <ArrowRight size={14} /> Send to Runsheet
+            <button
+              onClick={() => router.push("/runsheet")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary transition-colors"
+            >
+              <ArrowRight size={14} /> Runsheet
+            </button>
+            <button
+              onClick={() => router.push("/prep")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/15 text-accent text-sm hover:bg-accent/25 transition-colors"
+            >
+              <ArrowRight size={14} /> Go to Prep
             </button>
           </div>
 
@@ -389,8 +428,14 @@ export default function ResearchPage() {
                             ))}
                           </div>
                         </div>
-                        <button className="flex items-center gap-1.5 text-sm text-accent hover:underline">
-                          <RefreshCw size={12} /> Regenerate this section
+                        <button
+                          onClick={() => {
+                            const text = `# ${section.topic_title}\n\n## What Happened\n${section.what_happened}\n\n## Core Thesis\n${section.core_thesis}\n\n## Steel Man\n${section.steel_man}\n\n## Straw Man\n${section.straw_man}`;
+                            navigator.clipboard.writeText(text);
+                          }}
+                          className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-secondary transition-colors"
+                        >
+                          <Copy size={12} /> Copy Section
                         </button>
                       </div>
                     )}
