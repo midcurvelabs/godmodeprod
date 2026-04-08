@@ -29,6 +29,11 @@ export const SKILL_REGISTRY = {
     model: "claude" as const,
     description: "Generate platform-specific hooks and titles",
   },
+  "slide-generation": {
+    queue: "ai-jobs" as const,
+    model: "claude" as const,
+    description: "Generate episode presentation slides from research + docket",
+  },
   "transcript-ingest": {
     queue: "ai-jobs" as const,
     model: "gemini" as const,

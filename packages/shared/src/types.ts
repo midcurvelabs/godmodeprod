@@ -137,6 +137,35 @@ export interface Hooks {
   generated_at: string;
 }
 
+// --- Slides ---
+
+export type SlideType = "title_card" | "topic_intro" | "data_point" | "talking_point" | "quote" | "closer";
+
+export interface Slide {
+  type: SlideType;
+  heading: string;
+  bullets?: string[];
+  speaker_notes?: string;
+  source?: string;
+  data_value?: string;
+  data_label?: string;
+}
+
+export interface SlideStyle {
+  brandColor: string;
+  font: string;
+  layout: "minimal" | "bold" | "data_heavy";
+}
+
+export interface EpisodeSlides {
+  id: string;
+  episode_id: string;
+  content: { slides: Slide[] };
+  style: SlideStyle;
+  status: string;
+  generated_at: string;
+}
+
 // --- Post-Production ---
 
 export interface Transcript {
