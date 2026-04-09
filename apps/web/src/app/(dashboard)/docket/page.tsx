@@ -139,6 +139,7 @@ export default function DocketPage() {
     setAdding(true);
     const inputText = quickAddText.trim();
     const isLink = isUrl(inputText);
+    const isLocked = currentEpisode.status === "docket_locked";
     const res = await fetch("/api/docket/topics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -147,6 +148,7 @@ export default function DocketPage() {
         showId: currentShow.id,
         title: inputText,
         ...(isLink ? { originalUrl: inputText } : {}),
+        ...(isLocked ? { autoIn: true } : {}),
       }),
     });
     const json = await res.json();
