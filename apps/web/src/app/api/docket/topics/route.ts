@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { episodeId, showId, title, context, angle, sources, submittedBy } =
+  const { episodeId, showId, title, context, angle, sources, submittedBy, originalUrl } =
     body as {
       episodeId: string;
       showId: string;
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       angle?: string;
       sources?: Array<{ url: string; title: string }>;
       submittedBy?: string;
+      originalUrl?: string;
     };
 
   if (!episodeId || !showId || !title) {
@@ -74,6 +75,7 @@ export async function POST(request: Request) {
       context: context || "",
       angle: angle || "",
       sources: sources || [],
+      original_url: originalUrl || "",
       submitted_by: submittedBy || "",
       status: "under_review",
       sort_order: nextOrder,

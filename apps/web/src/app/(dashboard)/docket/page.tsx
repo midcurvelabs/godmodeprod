@@ -16,6 +16,8 @@ import {
   Lock,
   ListTodo,
   Sparkles,
+  X,
+  Link as LinkIcon,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { useJobPoll } from "@/lib/hooks/use-job-poll";
@@ -136,6 +138,7 @@ export default function DocketPage() {
     if (!quickAddText.trim() || !currentEpisode || !currentShow) return;
     setAdding(true);
     const inputText = quickAddText.trim();
+    const isLink = isUrl(inputText);
     const res = await fetch("/api/docket/topics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -143,6 +146,7 @@ export default function DocketPage() {
         episodeId: currentEpisode.id,
         showId: currentShow.id,
         title: inputText,
+        ...(isLink ? { originalUrl: inputText } : {}),
       }),
     });
     const json = await res.json();
@@ -151,7 +155,7 @@ export default function DocketPage() {
       setQuickAddText("");
 
       // Auto-enrich if input looks like a URL
-      if (isUrl(inputText)) {
+      if (isLink) {
         fetch("/api/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -327,7 +331,21 @@ export default function DocketPage() {
                     </div>
                     <StatusPill status={statusToPill(topic.status)} label={topic.status === "under_review" ? "review" : topic.status} />
                   </div>
-                  <div className="flex items-center gap-3 mt-1.5 ml-6 text-[11px] text-text-muted">
+                  {topic.original_url && (
+                    <div className="mt-1 ml-6">
+                      <a
+                        href={topic.original_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-[11px] text-accent/70 hover:text-accent truncate max-w-[280px]"
+                      >
+                        <LinkIcon size={10} className="shrink-0" />
+                        {topic.original_url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 50)}
+                      </a>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 mt-1 ml-6 text-[11px] text-text-muted">
                     {topic.submitted_by && <span>by {topic.submitted_by}</span>}
                     {topic.sources && topic.sources.length > 0 && (
                       <span className="flex items-center gap-1">
@@ -385,6 +403,22 @@ export default function DocketPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {selectedTopic.original_url && (
+                  <div>
+                    <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
+                      Original Link
+                    </h3>
+                    <a
+                      href={selectedTopic.original_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-accent hover:underline break-all"
+                    >
+                      <ExternalLink size={12} className="shrink-0" />
+                      {selectedTopic.original_url}
+                    </a>
+                  </div>
+                )}
                 {selectedTopic.context && (
                   <div>
                     <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
@@ -510,13 +544,26 @@ export default function DocketPage() {
                   onDragOver={(e) => handleDragOver(e, i)}
                   onDrop={() => handleDrop(i)}
                   onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
-                  className={`px-3 py-2.5 border-b border-border flex items-center gap-2 hover:bg-bg-elevated transition-colors cursor-grab ${
+                  onClick={() => setSelectedTopic(topic)}
+                  className={`px-3 py-2.5 border-b border-border flex items-center gap-2 hover:bg-bg-elevated transition-colors cursor-grab group ${
                     dragIdx === i ? "opacity-40" : ""
-                  } ${overIdx === i && dragIdx !== i ? "border-t-2 border-t-accent" : ""}`}
+                  } ${overIdx === i && dragIdx !== i ? "border-t-2 border-t-accent" : ""} ${
+                    selectedTopic?.id === topic.id ? "bg-bg-elevated" : ""
+                  }`}
                 >
                   <GripVertical size={14} className="text-text-muted shrink-0" />
                   <span className="text-accent font-display text-lg">{i + 1}</span>
-                  <span className="text-sm text-text-primary truncate">{topic.title}</span>
+                  <span className="text-sm text-text-primary truncate flex-1">{topic.title}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateTopicStatus(topic.id, "under_review");
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-all shrink-0"
+                    title="Remove from lineup"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               ))
             )}
