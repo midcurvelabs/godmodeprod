@@ -9,6 +9,7 @@ import {
   FileText,
   Copy,
   CheckCircle2,
+  Repeat,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { PipelineRail, type PipelineStep } from "./components/pipeline-rail";
@@ -86,6 +87,7 @@ export default function RepurposePage() {
   const [transcriptProcessing, setTranscriptProcessing] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generateJobId, setGenerateJobId] = useState<string | null>(null);
 
   // UI state
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
@@ -167,19 +169,31 @@ export default function RepurposePage() {
     return () => clearInterval(interval);
   }, [analyzing, currentEpisode]);
 
-  // Poll: content generation
+  // Poll: content generation — check job status and update outputs progressively
   useEffect(() => {
     if (!generating || !currentEpisode) return;
     const interval = setInterval(async () => {
+      // Update outputs on every poll
       const res = await fetch(`/api/repurpose?episode_id=${currentEpisode.id}`);
       const json = await res.json();
-      if (json.outputs?.length > 0) {
-        setOutputs(json.outputs);
-        setGenerating(false);
+      if (json.outputs?.length > 0) setOutputs(json.outputs);
+
+      // Check if the job has completed
+      if (generateJobId) {
+        const jobRes = await fetch(`/api/jobs/${generateJobId}`);
+        const jobJson = await jobRes.json();
+        if (jobJson.job?.status === "completed" || jobJson.job?.status === "failed") {
+          // Final fetch to get all outputs
+          const finalRes = await fetch(`/api/repurpose?episode_id=${currentEpisode.id}`);
+          const finalJson = await finalRes.json();
+          if (finalJson.outputs?.length > 0) setOutputs(finalJson.outputs);
+          setGenerating(false);
+          setGenerateJobId(null);
+        }
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [generating, currentEpisode]);
+  }, [generating, currentEpisode, generateJobId]);
 
   // --- Actions ---
 
@@ -212,11 +226,13 @@ export default function RepurposePage() {
   async function handleGenerateContent() {
     if (!currentShow || !currentEpisode) return;
     setGenerating(true);
-    await fetch("/api/repurpose", {
+    const res = await fetch("/api/repurpose", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "write", episodeId: currentEpisode.id, showId: currentShow.id }),
     });
+    const json = await res.json();
+    if (json.job?.id) setGenerateJobId(json.job.id);
   }
 
   async function handleHumanize(outputId: string) {
@@ -260,8 +276,10 @@ export default function RepurposePage() {
 
   if (!currentEpisode) {
     return (
-      <div className="text-center py-16 text-text-muted">
-        <p className="text-sm">Select an episode from the top bar to start repurposing.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <Repeat size={40} strokeWidth={1} className="text-text-muted mb-3" />
+        <h2 className="font-display text-2xl text-text-secondary mb-1">No Episode Selected</h2>
+        <p className="text-sm text-text-muted">Select an episode from the top bar to start repurposing.</p>
       </div>
     );
   }
