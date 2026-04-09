@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Search,
@@ -13,7 +14,10 @@ import {
   Clock,
   Loader2,
   Lock,
+  ListTodo,
   Sparkles,
+  X,
+  Link as LinkIcon,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { useJobPoll } from "@/lib/hooks/use-job-poll";
@@ -39,6 +43,7 @@ type TopicWithCounts = DocketTopic & {
 };
 
 export default function DocketPage() {
+  const router = useRouter();
   const { currentShow, currentEpisode } = useEpisodeStore();
   const [topics, setTopics] = useState<TopicWithCounts[]>([]);
   const [selectedTopic, setSelectedTopic] = useState<TopicWithCounts | null>(null);
@@ -133,6 +138,7 @@ export default function DocketPage() {
     if (!quickAddText.trim() || !currentEpisode || !currentShow) return;
     setAdding(true);
     const inputText = quickAddText.trim();
+    const isLink = isUrl(inputText);
     const res = await fetch("/api/docket/topics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -140,6 +146,7 @@ export default function DocketPage() {
         episodeId: currentEpisode.id,
         showId: currentShow.id,
         title: inputText,
+        ...(isLink ? { originalUrl: inputText } : {}),
       }),
     });
     const json = await res.json();
@@ -148,7 +155,7 @@ export default function DocketPage() {
       setQuickAddText("");
 
       // Auto-enrich if input looks like a URL
-      if (isUrl(inputText)) {
+      if (isLink) {
         fetch("/api/jobs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -202,15 +209,56 @@ export default function DocketPage() {
     }
   }
 
+  // --- Drag-to-reorder state ---
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+
   const filtered = topics.filter(
     (t) => !searchQuery || t.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const lineupTopics = topics.filter((t) => t.status === "in").sort((a, b) => a.sort_order - b.sort_order);
 
+  function handleDragStart(idx: number) {
+    setDragIdx(idx);
+  }
+
+  function handleDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    setOverIdx(idx);
+  }
+
+  async function handleDrop(idx: number) {
+    if (dragIdx === null || dragIdx === idx) {
+      setDragIdx(null);
+      setOverIdx(null);
+      return;
+    }
+    const reordered = [...lineupTopics];
+    const [moved] = reordered.splice(dragIdx, 1);
+    reordered.splice(idx, 0, moved);
+    // Optimistic update
+    const updatedTopics = topics.map((t) => {
+      const newIdx = reordered.findIndex((r) => r.id === t.id);
+      if (newIdx !== -1) return { ...t, sort_order: newIdx };
+      return t;
+    });
+    setTopics(updatedTopics);
+    setDragIdx(null);
+    setOverIdx(null);
+    // Persist to API
+    await fetch("/api/docket/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds: reordered.map((t) => t.id) }),
+    });
+  }
+
   if (!currentEpisode) {
     return (
-      <div className="text-center py-16 text-text-muted">
-        <p className="text-sm">Select an episode from the top bar to manage its docket.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <ListTodo size={40} strokeWidth={1} className="text-text-muted mb-3" />
+        <h2 className="font-display text-2xl text-text-secondary mb-1">No Episode Selected</h2>
+        <p className="text-sm text-text-muted">Select an episode from the top bar to manage its docket.</p>
       </div>
     );
   }
@@ -283,7 +331,21 @@ export default function DocketPage() {
                     </div>
                     <StatusPill status={statusToPill(topic.status)} label={topic.status === "under_review" ? "review" : topic.status} />
                   </div>
-                  <div className="flex items-center gap-3 mt-1.5 ml-6 text-[11px] text-text-muted">
+                  {topic.original_url && (
+                    <div className="mt-1 ml-6">
+                      <a
+                        href={topic.original_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-[11px] text-accent/70 hover:text-accent truncate max-w-[280px]"
+                      >
+                        <LinkIcon size={10} className="shrink-0" />
+                        {topic.original_url.replace(/^https?:\/\/(www\.)?/, "").slice(0, 50)}
+                      </a>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 mt-1 ml-6 text-[11px] text-text-muted">
                     {topic.submitted_by && <span>by {topic.submitted_by}</span>}
                     {topic.sources && topic.sources.length > 0 && (
                       <span className="flex items-center gap-1">
@@ -341,6 +403,22 @@ export default function DocketPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {selectedTopic.original_url && (
+                  <div>
+                    <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
+                      Original Link
+                    </h3>
+                    <a
+                      href={selectedTopic.original_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm text-accent hover:underline break-all"
+                    >
+                      <ExternalLink size={12} className="shrink-0" />
+                      {selectedTopic.original_url}
+                    </a>
+                  </div>
+                )}
                 {selectedTopic.context && (
                   <div>
                     <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
@@ -429,7 +507,10 @@ export default function DocketPage() {
                 >
                   Mark Out
                 </button>
-                <button className="flex items-center justify-center gap-1.5 flex-1 py-2 rounded-md bg-accent/15 text-accent text-sm font-medium hover:bg-accent/25 transition-colors">
+                <button
+                  onClick={() => router.push("/research")}
+                  className="flex items-center justify-center gap-1.5 flex-1 py-2 rounded-md bg-accent/15 text-accent text-sm font-medium hover:bg-accent/25 transition-colors"
+                >
                   <ArrowRight size={14} /> Research
                 </button>
               </div>
@@ -458,11 +539,31 @@ export default function DocketPage() {
               lineupTopics.map((topic, i) => (
                 <div
                   key={topic.id}
-                  className="px-3 py-2.5 border-b border-border flex items-center gap-2 hover:bg-bg-elevated transition-colors cursor-grab"
+                  draggable
+                  onDragStart={() => handleDragStart(i)}
+                  onDragOver={(e) => handleDragOver(e, i)}
+                  onDrop={() => handleDrop(i)}
+                  onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+                  onClick={() => setSelectedTopic(topic)}
+                  className={`px-3 py-2.5 border-b border-border flex items-center gap-2 hover:bg-bg-elevated transition-colors cursor-grab group ${
+                    dragIdx === i ? "opacity-40" : ""
+                  } ${overIdx === i && dragIdx !== i ? "border-t-2 border-t-accent" : ""} ${
+                    selectedTopic?.id === topic.id ? "bg-bg-elevated" : ""
+                  }`}
                 >
                   <GripVertical size={14} className="text-text-muted shrink-0" />
                   <span className="text-accent font-display text-lg">{i + 1}</span>
-                  <span className="text-sm text-text-primary truncate">{topic.title}</span>
+                  <span className="text-sm text-text-primary truncate flex-1">{topic.title}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateTopicStatus(topic.id, "under_review");
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-error/20 text-text-muted hover:text-error transition-all shrink-0"
+                    title="Remove from lineup"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               ))
             )}

@@ -130,8 +130,10 @@ export default function NewsletterPage() {
 
   if (!currentEpisode) {
     return (
-      <div className="text-center py-16 text-text-muted">
-        <p className="text-sm">Select an episode from the top bar to generate a newsletter.</p>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <Mail size={40} strokeWidth={1} className="text-text-muted mb-3" />
+        <h2 className="font-display text-2xl text-text-secondary mb-1">No Episode Selected</h2>
+        <p className="text-sm text-text-muted">Select an episode from the top bar to generate a newsletter.</p>
       </div>
     );
   }

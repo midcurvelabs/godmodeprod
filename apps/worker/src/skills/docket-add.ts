@@ -9,13 +9,96 @@ interface DocketAddPayload {
   rawText?: string;
 }
 
+// --- URL scraping helpers ---
+
+function isTwitterUrl(url: string): boolean {
+  return /^https?:\/\/(x\.com|twitter\.com)\//i.test(url);
+}
+
+async function scrapeTwitter(url: string): Promise<string> {
+  // Use FxTwitter API — returns tweet JSON without auth
+  const fxUrl = url
+    .replace(/^https?:\/\/(x\.com|twitter\.com)/i, "https://api.fxtwitter.com");
+  const res = await fetch(fxUrl, {
+    headers: { "User-Agent": "GodModeProd/1.0" },
+  });
+  if (!res.ok) throw new Error(`FxTwitter ${res.status}`);
+  const data = await res.json();
+  const tweet = data.tweet;
+  if (!tweet) throw new Error("No tweet data returned");
+  const parts = [
+    `Author: ${tweet.author?.name || "Unknown"} (@${tweet.author?.screen_name || "unknown"})`,
+    `Text: ${tweet.text}`,
+  ];
+  if (tweet.created_at) parts.push(`Posted: ${tweet.created_at}`);
+  if (tweet.likes) parts.push(`Likes: ${tweet.likes}`);
+  if (tweet.retweets) parts.push(`Retweets: ${tweet.retweets}`);
+  if (tweet.media?.all?.length) {
+    parts.push(`Media: ${tweet.media.all.length} attachment(s)`);
+  }
+  return parts.join("\n");
+}
+
+async function scrapeGenericUrl(url: string): Promise<string> {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; GodModeProd/1.0)",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+    redirect: "follow",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const html = await res.text();
+  // Extract title
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : "";
+  // Extract meta description
+  const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+  const desc = descMatch ? descMatch[1].trim() : "";
+  // Extract og:title and og:description
+  const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
+  const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+  // Strip HTML tags from body text, take first 2000 chars
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+  let bodyText = "";
+  if (bodyMatch) {
+    bodyText = bodyMatch[1]
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 2000);
+  }
+  const parts = [];
+  if (title || ogTitleMatch?.[1]) parts.push(`Title: ${ogTitleMatch?.[1] || title}`);
+  if (desc || ogDescMatch?.[1]) parts.push(`Description: ${ogDescMatch?.[1] || desc}`);
+  if (bodyText) parts.push(`Content: ${bodyText}`);
+  return parts.join("\n\n") || "Could not extract content from page.";
+}
+
+async function fetchUrlContent(url: string): Promise<string> {
+  try {
+    if (isTwitterUrl(url)) {
+      return await scrapeTwitter(url);
+    }
+    return await scrapeGenericUrl(url);
+  } catch (err) {
+    return `[Failed to fetch URL content: ${err instanceof Error ? err.message : String(err)}]\nURL: ${url}`;
+  }
+}
+
 const SYSTEM_PROMPT = `You are a podcast topic researcher for a tech/web3/AI podcast.
 
-Given a link or raw topic text, expand it into a structured docket entry with:
+Given scraped content from a link or raw topic text, expand it into a structured docket entry with:
 1. A clear, punchy title (if the original is vague, improve it)
 2. Context: 2-3 sentences on what happened and why it matters NOW
 3. Angle: the specific lens or take the hosts should explore (not just "discuss this")
 4. Sources: relevant links with titles (if a URL was provided, include it plus any related sources you know about)
+
+IMPORTANT: Base your response ONLY on the actual scraped content provided. Do NOT make up information. If the content is a tweet, use the actual tweet text and author — do not fabricate quotes or authors.
 
 Your job is to give hosts enough context to decide if this topic is IN or OUT for the episode, and enough angle to make the conversation interesting.
 
@@ -60,7 +143,8 @@ export async function execute(
 
   let userPrompt = "";
   if (payload.url) {
-    userPrompt = `Expand this link into a docket entry:\n\nURL: ${payload.url}`;
+    const scraped = await fetchUrlContent(payload.url);
+    userPrompt = `Expand this link into a docket entry based on the ACTUAL scraped content below.\n\nURL: ${payload.url}\n\n--- SCRAPED CONTENT ---\n${scraped}\n--- END SCRAPED CONTENT ---`;
   } else if (payload.rawText) {
     userPrompt = `Expand this topic into a docket entry:\n\n${payload.rawText}`;
   } else {
