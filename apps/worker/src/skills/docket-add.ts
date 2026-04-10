@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callGemini as GeminiFn } from "../lib/gemini";
+import { callModel } from "../lib/router";
 
 interface DocketAddPayload {
   topicId: string;
@@ -111,8 +111,7 @@ Output ONLY valid JSON:
 }`;
 
 export async function execute(
-  payload: DocketAddPayload,
-  callGemini: typeof GeminiFn
+  payload: DocketAddPayload
 ): Promise<Record<string, unknown>> {
   // Fetch show context
   const { data: showContextRows } = await supabase
@@ -157,7 +156,9 @@ export async function execute(
     userPrompt = `Expand this topic into a docket entry:\n\n${topic?.title || "Unknown topic"}`;
   }
 
-  const response = await callGemini({
+  // Routes to Grok 4 Fast — native web/X access lets it enrich the scraped
+  // content with fresh context rather than just summarizing what's passed in.
+  const response = await callModel("docket-add", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,

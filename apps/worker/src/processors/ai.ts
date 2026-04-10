@@ -1,6 +1,22 @@
 import type { Job } from "bullmq";
 import { logActivity, updateJobStatus } from "../lib/supabase";
 
+// Known AI skill names. Keep in sync with files in ../skills/.
+const AI_SKILLS = new Set([
+  "research-brief",
+  "tight-questions",
+  "runsheet",
+  "hook-writing",
+  "slide-generation",
+  "repurpose-write",
+  "substack",
+  "humanizer",
+  "docket-add",
+  "docket-summarise",
+  "transcript-ingest",
+  "repurpose-analyze",
+]);
+
 export async function processAiJob(job: Job): Promise<unknown> {
   const { skillName, showId, episodeId, jobId, payload } = job.data;
 
@@ -10,37 +26,18 @@ export async function processAiJob(job: Job): Promise<unknown> {
   });
 
   try {
-    let result: unknown;
-    const skillPayload = { ...payload, showId, episodeId, jobId };
-
-    switch (skillName) {
-      case "research-brief":
-      case "tight-questions":
-      case "runsheet":
-      case "hook-writing":
-      case "slide-generation":
-      case "repurpose-write":
-      case "substack":
-      case "humanizer": {
-        const { callClaude } = await import("../lib/claude");
-        const skill = await import(`../skills/${skillName}`);
-        result = await skill.execute(skillPayload, callClaude);
-        break;
-      }
-      case "docket-add":
-      case "docket-summarise":
-      case "transcript-ingest":
-      case "repurpose-analyze": {
-        const { callGemini } = await import("../lib/gemini");
-        const skill = await import(`../skills/${skillName}`);
-        result = await skill.execute(skillPayload, callGemini);
-        break;
-      }
-      default:
-        throw new Error(`Unknown AI skill: ${skillName}`);
+    if (!AI_SKILLS.has(skillName)) {
+      throw new Error(`Unknown AI skill: ${skillName}`);
     }
 
-    if (jobId) await updateJobStatus(jobId, "completed", result as Record<string, unknown>);
+    const skillPayload = { ...payload, showId, episodeId, jobId };
+    const skill = await import(`../skills/${skillName}`);
+
+    // Skills now use lib/router.ts internally — no DI needed.
+    const result = await skill.execute(skillPayload);
+
+    if (jobId)
+      await updateJobStatus(jobId, "completed", result as Record<string, unknown>);
     await logActivity(showId, episodeId, `skill:${skillName}:completed`, {
       jobId: job.id,
     });

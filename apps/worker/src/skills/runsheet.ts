@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 
 interface RunsheetPayload {
   showId: string;
@@ -26,8 +26,7 @@ For each segment include:
 Output ONLY valid JSON: { "segments": [...] }`;
 
 export async function execute(
-  payload: RunsheetPayload,
-  callClaude: typeof ClaudeFn
+  payload: RunsheetPayload
 ): Promise<Record<string, unknown>> {
   // Fetch research brief + docket topics
   const [briefRes, topicsRes, showContextRes, episodeRes] = await Promise.all([
@@ -85,11 +84,10 @@ export async function execute(
     userPrompt += `\n\nResearch brief available:\n${JSON.stringify(briefContent, null, 2).slice(0, 4000)}`;
   }
 
-  const response = await callClaude({
+  const response = await callModel("runsheet", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,
-    maxTokens: 8192,
   });
 
   let runsheetContent: Record<string, unknown>;

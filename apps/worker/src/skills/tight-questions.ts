@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 
 interface TightQuestionsPayload {
   topics: Array<{ title: string; context: string; angle: string }>;
@@ -21,8 +21,7 @@ For each topic, generate 4-5 questions using different types. Label each questio
 Output ONLY valid JSON: { "topics": [{ "title": "...", "questions": [{ "type": "opener|devils_advocate|bridge|crystal_ball|closer", "question": "..." }] }] }`;
 
 export async function execute(
-  payload: TightQuestionsPayload,
-  callClaude: typeof ClaudeFn
+  payload: TightQuestionsPayload
 ): Promise<Record<string, unknown>> {
   const topicList = payload.topics
     .map((t, i) => `${i + 1}. ${t.title}\n   Context: ${t.context}\n   Angle: ${t.angle}`)
@@ -54,11 +53,10 @@ export async function execute(
     }
   }
 
-  const response = await callClaude({
+  const response = await callModel("tight-questions", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt: `Generate tight questions for these topics:\n\n${topicList}`,
     context,
-    maxTokens: 4096,
   });
 
   let result: Record<string, unknown>;

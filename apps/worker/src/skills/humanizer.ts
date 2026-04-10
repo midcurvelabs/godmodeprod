@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 
 interface HumanizerPayload {
   outputId: string;
@@ -53,8 +53,7 @@ The rewritten text must sound like the specific host would write it. Match their
 Output ONLY valid JSON matching the EXACT SAME STRUCTURE as the input. Do not add or remove fields. Only change the text content.`;
 
 export async function execute(
-  payload: HumanizerPayload,
-  callClaude: typeof ClaudeFn
+  payload: HumanizerPayload
 ): Promise<Record<string, unknown>> {
   // Fetch the output to humanize
   const { data: output } = await supabase
@@ -110,11 +109,10 @@ Match this voice EXACTLY. The text should sound like ${host.name} wrote it, not 
 
   const userPrompt = `Humanize this ${output.output_type} content. Apply all 24 AI pattern checks. Match the host voice. Keep the substance.${voiceNote}\n\nContent to humanize:\n${JSON.stringify(output.content, null, 2)}`;
 
-  const response = await callClaude({
+  const response = await callModel("humanizer", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,
-    maxTokens: 8192,
   });
 
   // Parse JSON
