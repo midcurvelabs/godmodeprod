@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callGemini as GeminiFn } from "../lib/gemini";
+import { callModel } from "../lib/router";
 
 interface TranscriptIngestPayload {
   transcriptId: string;
@@ -31,8 +31,7 @@ Output ONLY valid JSON:
 }`;
 
 export async function execute(
-  payload: TranscriptIngestPayload,
-  callGemini: typeof GeminiFn
+  payload: TranscriptIngestPayload
 ): Promise<Record<string, unknown>> {
   // Fetch raw transcript
   const { data: transcript } = await supabase
@@ -82,7 +81,7 @@ export async function execute(
 
   const userPrompt = `Here are the podcast hosts:\n${hostList}\n\nHere is the raw transcript to process:\n\n${transcript.raw_content}`;
 
-  const response = await callGemini({
+  const response = await callModel("transcript-ingest", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,

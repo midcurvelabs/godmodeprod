@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 import type { SkillContext } from "@godmodeprod/shared";
 
 interface RepurposeWritePayload {
@@ -121,7 +121,6 @@ Output ONLY valid JSON:
 
 async function writeCaptions(
   payload: RepurposeWritePayload,
-  callClaude: typeof ClaudeFn,
   masterContent: Record<string, unknown>,
   hostList: string,
   context: SkillContext,
@@ -129,11 +128,10 @@ async function writeCaptions(
 ): Promise<string[]> {
   const userPrompt = `Hosts:\n${hostList}\n\nClip candidates from analysis:\n${JSON.stringify(masterContent.clip_candidates, null, 2)}\n\nWrite shorts captions for every clip candidate. Each host must have captions for all their clips.`;
 
-  const response = await callClaude({
+  const response = await callModel("repurpose-shorts", {
     systemPrompt: CAPTIONS_PROMPT,
     userPrompt,
     context,
-    maxTokens: 8192,
   });
 
   let parsed: Record<string, unknown>;
@@ -195,7 +193,6 @@ Output ONLY valid JSON:
 
 async function writeTwitter(
   payload: RepurposeWritePayload,
-  callClaude: typeof ClaudeFn,
   masterContent: Record<string, unknown>,
   hostList: string,
   context: SkillContext,
@@ -209,11 +206,11 @@ async function writeTwitter(
     themes: masterContent.themes,
   }, null, 2)}\n\nWrite Twitter threads and standalone tweets for each host. Minimum 10 standalone tweets total.`;
 
-  const response = await callClaude({
+  // Routes to Grok 4 Fast — native X voice.
+  const response = await callModel("repurpose-twitter", {
     systemPrompt: TWITTER_PROMPT,
     userPrompt,
     context,
-    maxTokens: 8192,
   });
 
   let parsed: Record<string, unknown>;
@@ -270,7 +267,6 @@ Output ONLY valid JSON:
 
 async function writeLinkedIn(
   payload: RepurposeWritePayload,
-  callClaude: typeof ClaudeFn,
   masterContent: Record<string, unknown>,
   hostList: string,
   context: SkillContext,
@@ -283,11 +279,10 @@ async function writeLinkedIn(
     content_angles: masterContent.content_angles,
   }, null, 2)}\n\nWrite 3 LinkedIn posts (one per host or distributed). Each post 300-400 words, prose only, no bullets.`;
 
-  const response = await callClaude({
+  const response = await callModel("repurpose-linkedin", {
     systemPrompt: LINKEDIN_PROMPT,
     userPrompt,
     context,
-    maxTokens: 6144,
   });
 
   let parsed: Record<string, unknown>;
@@ -378,7 +373,6 @@ Output ONLY valid JSON:
 
 async function writeYouTubeScheduleClips(
   payload: RepurposeWritePayload,
-  callClaude: typeof ClaudeFn,
   masterContent: Record<string, unknown>,
   hostList: string,
   context: SkillContext
@@ -391,11 +385,10 @@ async function writeYouTubeScheduleClips(
     host_clip_summary: masterContent.host_clip_summary,
   }, null, 2)}\n\nGenerate YouTube segments, a 7-day posting schedule, and clip timestamps for the video pipeline.`;
 
-  const response = await callClaude({
+  const response = await callModel("repurpose-youtube", {
     systemPrompt: YOUTUBE_SCHEDULE_PROMPT,
     userPrompt,
     context,
-    maxTokens: 8192,
   });
 
   let parsed: Record<string, unknown>;
@@ -438,8 +431,7 @@ async function writeYouTubeScheduleClips(
 // --- Main Execute ---
 
 export async function execute(
-  payload: RepurposeWritePayload,
-  callClaude: typeof ClaudeFn
+  payload: RepurposeWritePayload
 ): Promise<Record<string, unknown>> {
   const { masterOutput, hosts, hostList, context } = await fetchPrerequisites(payload);
   const masterContent = masterOutput.content as Record<string, unknown>;
@@ -449,22 +441,22 @@ export async function execute(
   const targetType = payload.outputType;
 
   if (!targetType || targetType === "captions") {
-    const ids = await writeCaptions(payload, callClaude, masterContent, hostList, context, hosts);
+    const ids = await writeCaptions(payload, masterContent, hostList, context, hosts);
     allIds.push(...ids);
   }
 
   if (!targetType || targetType === "twitter") {
-    const ids = await writeTwitter(payload, callClaude, masterContent, hostList, context, hosts);
+    const ids = await writeTwitter(payload, masterContent, hostList, context, hosts);
     allIds.push(...ids);
   }
 
   if (!targetType || targetType === "linkedin") {
-    const ids = await writeLinkedIn(payload, callClaude, masterContent, hostList, context, hosts);
+    const ids = await writeLinkedIn(payload, masterContent, hostList, context, hosts);
     allIds.push(...ids);
   }
 
   if (!targetType || targetType === "youtube_segments" || targetType === "schedule" || targetType === "clip_timestamps") {
-    const ids = await writeYouTubeScheduleClips(payload, callClaude, masterContent, hostList, context);
+    const ids = await writeYouTubeScheduleClips(payload, masterContent, hostList, context);
     allIds.push(...ids);
   }
 

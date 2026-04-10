@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 
 interface HookWritingPayload {
   episodeTitle: string;
@@ -28,8 +28,7 @@ Output ONLY valid JSON:
 }`;
 
 export async function execute(
-  payload: HookWritingPayload,
-  callClaude: typeof ClaudeFn
+  payload: HookWritingPayload
 ): Promise<Record<string, unknown>> {
   const { data: showContextRows } = await supabase
     .from("show_context")
@@ -59,11 +58,10 @@ export async function execute(
 
   const topicList = payload.topics.map((t) => `- ${t.title} (${t.angle})`).join("\n");
 
-  const response = await callClaude({
+  const response = await callModel("hook-writing", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt: `Write hooks for Episode ${payload.episodeNumber}: "${payload.episodeTitle}"\n\nTopics:\n${topicList}`,
     context,
-    maxTokens: 2048,
   });
 
   let hookData: Record<string, unknown>;

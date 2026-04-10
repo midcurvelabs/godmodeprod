@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callGemini as GeminiFn } from "../lib/gemini";
+import { callModel } from "../lib/router";
 
 interface RepurposeAnalyzePayload {
   episodeId: string;
@@ -101,8 +101,7 @@ IMPORTANT:
 - Quotable lines must be EXACT quotes, not paraphrased.`;
 
 export async function execute(
-  payload: RepurposeAnalyzePayload,
-  callGemini: typeof GeminiFn
+  payload: RepurposeAnalyzePayload
 ): Promise<Record<string, unknown>> {
   // Fetch clean transcript
   const { data: transcript } = await supabase
@@ -158,7 +157,7 @@ export async function execute(
 
   const userPrompt = `Here are the podcast hosts. You MUST identify 5-8 clips per host:\n${hostList}\n\nAnalyze this podcast transcript and extract all repurposable content:\n\n${transcript.clean_content}`;
 
-  const response = await callGemini({
+  const response = await callModel("repurpose-analyze", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,

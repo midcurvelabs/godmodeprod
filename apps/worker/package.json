@@ -9,11 +9,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39",
     "@google/generative-ai": "^0.24",
     "@supabase/supabase-js": "^2",
     "bullmq": "^5",
     "ioredis": "^5",
+    "openai": "^4.77.0",
     "@godmodeprod/shared": "workspace:*"
   },
   "devDependencies": {

@@ -7,6 +7,7 @@ interface GeminiCallOptions {
   systemPrompt: string;
   userPrompt: string;
   context: SkillContext;
+  model?: string; // default: gemini-2.5-flash
 }
 
 function buildContextBlock(context: SkillContext): string {
@@ -25,9 +26,10 @@ export async function callGemini({
   systemPrompt,
   userPrompt,
   context,
+  model: modelId = "gemini-2.5-flash",
 }: GeminiCallOptions): Promise<string> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: modelId,
     systemInstruction: `${systemPrompt}\n\n${buildContextBlock(context)}`,
   });
 
@@ -35,11 +37,11 @@ export async function callGemini({
   return result.response.text();
 }
 
-export async function generateImage(
-  prompt: string
-): Promise<Buffer> {
+export async function generateImage(prompt: string): Promise<Buffer> {
+  // Upgraded from gemini-2.0-flash-preview-image-generation (preview) to
+  // gemini-2.5-flash-image (production, aka nano-banana).
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash-preview-image-generation",
+    model: "gemini-2.5-flash-image",
   });
 
   const result = await model.generateContent({

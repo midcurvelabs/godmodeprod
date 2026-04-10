@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 
 interface SubstackPayload {
   episodeId: string;
@@ -58,8 +58,7 @@ Output ONLY valid JSON:
 }`;
 
 export async function execute(
-  payload: SubstackPayload,
-  callClaude: typeof ClaudeFn
+  payload: SubstackPayload
 ): Promise<Record<string, unknown>> {
   // Fetch clean transcript
   const { data: transcript } = await supabase
@@ -137,11 +136,10 @@ export async function execute(
 
   userPrompt += `Full transcript:\n${transcript.clean_content}`;
 
-  const response = await callClaude({
+  const response = await callModel("substack", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,
-    maxTokens: 8192,
   });
 
   // Parse JSON

@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase";
-import type { callGemini as GeminiFn } from "../lib/gemini";
+import { callModel } from "../lib/router";
 
 interface DocketSummarisePayload {
   showId: string;
@@ -23,8 +23,7 @@ Output ONLY valid JSON:
 }`;
 
 export async function execute(
-  payload: DocketSummarisePayload,
-  callGemini: typeof GeminiFn
+  payload: DocketSummarisePayload
 ): Promise<Record<string, unknown>> {
   // Fetch confirmed topics
   const { data: topics } = await supabase
@@ -74,7 +73,7 @@ export async function execute(
 
   const userPrompt = `Summarize this episode's confirmed lineup (${topics.length} topics):\n\n${topicList}`;
 
-  const response = await callGemini({
+  const response = await callModel("docket-summarise", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,

@@ -1,45 +1,68 @@
 import { supabase } from "../lib/supabase";
-import type { callClaude as ClaudeFn } from "../lib/claude";
+import { callModel } from "../lib/router";
 
 interface SlideGenerationPayload {
   showId: string;
   episodeId: string;
 }
 
-const SYSTEM_PROMPT = `You are a slide designer for a tech/web3/AI podcast. You create text-based presentation slides that hosts display on-screen during recording.
+// --- Slide generation system prompt (upgraded) ---
+//
+// Rewritten to push for better narrative structure, concrete data, and
+// presenter-aware framing. Runs on Sonnet 4.6 + extended thinking (see
+// lib/models.ts → "slide-generation").
+const SYSTEM_PROMPT = `You are the lead slide designer for "God Mode Pod", a tech/web3/AI podcast with three hosts who display slides on-screen while recording. Your job is to turn research into a punchy, narrative-driven deck the hosts present to the camera.
 
-Slide types:
-- title_card: Episode title + subtitle, sets the tone
-- topic_intro: Introduces a topic with 2-3 framing bullets
-- data_point: One key stat or data point with context (use data_value + data_label fields)
-- talking_point: Core thesis or argument with supporting bullets
-- quote: A notable quote relevant to the topic
-- closer: Wrap-up slide with key takeaways
+## Slide types (use ALL of them across the deck)
 
-Rules:
-- Generate 8-15 slides total
-- Start with 1 title_card, end with 1 closer
-- For each topic: 1 topic_intro, 1-2 data_points (from research), 1 talking_point
-- Keep headings under 60 characters
-- Bullets should be concise (under 100 chars each), max 4 per slide
-- speaker_notes are private hints for the presenter (1-2 sentences)
-- data_value should be a single number or short stat, data_label explains it
+- **title_card** — Episode number + punchy title + 1-line hook. Used once at the start.
+- **topic_intro** — Opens a new segment. Framing bullet that sets up tension or stakes. 2-3 bullets max.
+- **data_point** — ONE concrete number + what it means. Use data_value (short stat like "$4.2B" or "67%") and data_label (1 sentence explaining significance). These are the deck's anchors — viewers screenshot these.
+- **talking_point** — A sharp claim, thesis, or contrarian take. Supporting bullets should be reasons or examples, not restatements.
+- **quote** — A verbatim quote from a source (with attribution). Use sparingly — max 1-2 per deck.
+- **closer** — Final slide: 3 takeaways or 1 big question. Used once at the end.
 
-Output ONLY valid JSON:
+## Structural rules (non-negotiable)
+
+- Generate **10-15 slides** total. Fewer feels thin; more loses attention.
+- Open with **1 title_card**, close with **1 closer**.
+- Every confirmed topic gets AT MINIMUM: 1 topic_intro + 1 data_point + 1 talking_point.
+- Insert at least **3 data_points across the whole deck**. If the research brief has numbers, USE them — don't invent.
+- No two consecutive slides of the same type. Vary the rhythm.
+
+## Writing rules
+
+- **Headings**: <60 characters. Specific claims, not generic categories. ❌ "AI Regulation" ✅ "The EU Just Made GPT-5 Illegal in Finance"
+- **Bullets**: <100 characters each, max 4 per slide. Each bullet must add new information, not rephrase the heading.
+- **Speaker notes**: 1-2 sentences that are NOT on the slide — a stat, a tangent to explore, or a question to pose to the other host. Treat these as the host's private earpiece.
+- **Tone**: Confident, specific, and slightly contrarian. This is a builder podcast, not a beginner explainer. Assume the viewer knows the basics.
+- **No filler**: Never write "Let's talk about...", "In this segment...", "First, we'll cover...". Jump straight to the claim.
+- **No hype words**: "groundbreaking", "game-changing", "revolutionary", "stunning", "unprecedented". Show, don't tell.
+
+## Narrative arc
+
+The deck should tell ONE story across topics, not feel like disconnected research. Order slides so each topic builds on the last — use topic_intros to call back or contrast with earlier slides when possible.
+
+## Output format
+
+Return ONLY valid JSON. No preamble, no markdown fences.
+
 {
   "slides": [
     {
-      "type": "title_card",
-      "heading": "...",
-      "bullets": ["..."],
-      "speaker_notes": "..."
+      "type": "title_card" | "topic_intro" | "data_point" | "talking_point" | "quote" | "closer",
+      "heading": "Punchy claim under 60 chars",
+      "bullets": ["Supporting point 1", "Supporting point 2"],
+      "speaker_notes": "Private hint for the presenter",
+      "data_value": "$4.2B",        // data_point only
+      "data_label": "What it means", // data_point only
+      "source": "Attribution"        // quote only
     }
   ]
 }`;
 
 export async function execute(
-  payload: SlideGenerationPayload,
-  callClaude: typeof ClaudeFn
+  payload: SlideGenerationPayload
 ): Promise<Record<string, unknown>> {
   const [briefRes, topicsRes, showContextRes, episodeRes] = await Promise.all([
     supabase
@@ -96,11 +119,11 @@ export async function execute(
     userPrompt += `\n\nResearch brief (use data_points and core_thesis for slides):\n${JSON.stringify(briefContent, null, 2).slice(0, 6000)}`;
   }
 
-  const response = await callClaude({
+  // Routed via lib/models.ts → Sonnet 4.6 + extended thinking + 8192 tok.
+  const response = await callModel("slide-generation", {
     systemPrompt: SYSTEM_PROMPT,
     userPrompt,
     context,
-    maxTokens: 4096,
   });
 
   let slidesContent: Record<string, unknown>;
