@@ -8,7 +8,11 @@
     "type-check": "tsc --noEmit",
     "lint": "echo 'no lint configured'"
   },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2"
+  },
   "devDependencies": {
+    "@supabase/supabase-js": "^2",
     "typescript": "^5.7"
   }
 }

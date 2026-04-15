@@ -97,6 +97,9 @@ importers:
 
   packages/shared:
     devDependencies:
+      '@supabase/supabase-js':
+        specifier: ^2
+        version: 2.101.1
       typescript:
         specifier: ^5.7
         version: 5.9.3

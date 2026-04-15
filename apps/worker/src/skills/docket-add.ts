@@ -15,7 +15,12 @@ function isTwitterUrl(url: string): boolean {
   return /^https?:\/\/(x\.com|twitter\.com)\//i.test(url);
 }
 
-async function scrapeTwitter(url: string): Promise<string> {
+interface ScrapedContent {
+  text: string;
+  imageUrl?: string;
+}
+
+async function scrapeTwitter(url: string): Promise<ScrapedContent> {
   // Use FxTwitter API — returns tweet JSON without auth
   const fxUrl = url
     .replace(/^https?:\/\/(x\.com|twitter\.com)/i, "https://api.fxtwitter.com");
@@ -36,10 +41,11 @@ async function scrapeTwitter(url: string): Promise<string> {
   if (tweet.media?.all?.length) {
     parts.push(`Media: ${tweet.media.all.length} attachment(s)`);
   }
-  return parts.join("\n");
+  const imageUrl: string | undefined = tweet.media?.photos?.[0]?.url || undefined;
+  return { text: parts.join("\n"), imageUrl };
 }
 
-async function scrapeGenericUrl(url: string): Promise<string> {
+async function scrapeGenericUrl(url: string): Promise<ScrapedContent> {
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; GodModeProd/1.0)",
@@ -57,9 +63,23 @@ async function scrapeGenericUrl(url: string): Promise<string> {
   const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
     || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
   const desc = descMatch ? descMatch[1].trim() : "";
-  // Extract og:title and og:description
+  // Extract og:title, og:description and og:image
   const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
   const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+  const ogImageMatch =
+    html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
+    || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i)
+    || html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i);
+  let imageUrl: string | undefined = ogImageMatch?.[1]?.trim() || undefined;
+  // Resolve protocol-relative and relative og:image URLs against the page URL.
+  if (imageUrl) {
+    try {
+      imageUrl = new URL(imageUrl, url).toString();
+    } catch {
+      // If resolution fails, drop the value rather than persisting something broken.
+      imageUrl = undefined;
+    }
+  }
   // Strip HTML tags from body text, take first 2000 chars
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   let bodyText = "";
@@ -76,17 +96,22 @@ async function scrapeGenericUrl(url: string): Promise<string> {
   if (title || ogTitleMatch?.[1]) parts.push(`Title: ${ogTitleMatch?.[1] || title}`);
   if (desc || ogDescMatch?.[1]) parts.push(`Description: ${ogDescMatch?.[1] || desc}`);
   if (bodyText) parts.push(`Content: ${bodyText}`);
-  return parts.join("\n\n") || "Could not extract content from page.";
+  return {
+    text: parts.join("\n\n") || "Could not extract content from page.",
+    imageUrl,
+  };
 }
 
-async function fetchUrlContent(url: string): Promise<string> {
+async function fetchUrlContent(url: string): Promise<ScrapedContent> {
   try {
     if (isTwitterUrl(url)) {
       return await scrapeTwitter(url);
     }
     return await scrapeGenericUrl(url);
   } catch (err) {
-    return `[Failed to fetch URL content: ${err instanceof Error ? err.message : String(err)}]\nURL: ${url}`;
+    return {
+      text: `[Failed to fetch URL content: ${err instanceof Error ? err.message : String(err)}]\nURL: ${url}`,
+    };
   }
 }
 
@@ -141,9 +166,11 @@ export async function execute(
   }
 
   let userPrompt = "";
+  let scrapedImageUrl: string | undefined;
   if (payload.url) {
     const scraped = await fetchUrlContent(payload.url);
-    userPrompt = `Expand this link into a docket entry based on the ACTUAL scraped content below.\n\nURL: ${payload.url}\n\n--- SCRAPED CONTENT ---\n${scraped}\n--- END SCRAPED CONTENT ---`;
+    scrapedImageUrl = scraped.imageUrl;
+    userPrompt = `Expand this link into a docket entry based on the ACTUAL scraped content below.\n\nURL: ${payload.url}\n\n--- SCRAPED CONTENT ---\n${scraped.text}\n--- END SCRAPED CONTENT ---`;
   } else if (payload.rawText) {
     userPrompt = `Expand this topic into a docket entry:\n\n${payload.rawText}`;
   } else {
@@ -179,6 +206,7 @@ export async function execute(
   if (parsed.angle) updates.angle = parsed.angle;
   if (parsed.sources) updates.sources = parsed.sources;
   if (parsed.title) updates.title = parsed.title;
+  if (scrapedImageUrl) updates.original_image_url = scrapedImageUrl;
 
   if (Object.keys(updates).length > 0) {
     await supabase
@@ -187,5 +215,5 @@ export async function execute(
       .eq("id", payload.topicId);
   }
 
-  return { topicId: payload.topicId, enriched: true, ...parsed };
+  return { topicId: payload.topicId, enriched: true, imageUrl: scrapedImageUrl, ...parsed };
 }

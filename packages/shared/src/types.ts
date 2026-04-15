@@ -87,6 +87,7 @@ export interface DocketTopic {
   angle: string;
   sources: Array<{ url: string; title: string }>;
   original_url: string;
+  original_image_url: string | null;
   submitted_by: string;
   status: DocketTopicStatus;
   sort_order: number;

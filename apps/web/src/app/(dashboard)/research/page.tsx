@@ -12,9 +12,11 @@ import {
   CheckCircle2,
   Loader2,
   User,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { useJobPoll } from "@/lib/hooks/use-job-poll";
+import { TopSheet } from "@/components/ui/bottom-sheet";
 import type { DocketTopic, ResearchBrief } from "@godmodeprod/shared";
 
 interface BriefSection {
@@ -36,6 +38,7 @@ export default function ResearchPage() {
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
   const [brief, setBrief] = useState<ResearchBrief | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<number>>(new Set());
+  const [configOpen, setConfigOpen] = useState(false);
   const [guestMode, setGuestMode] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestBio, setGuestBio] = useState("");
@@ -202,156 +205,186 @@ export default function ResearchPage() {
 
   const sections = (brief?.content as { sections?: BriefSection[] })?.sections || [];
 
+  const briefBuilder = (
+    <>
+      <div className="p-4 border-b border-border">
+        <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted mb-3">
+          Confirmed Topics
+        </h3>
+        {topics.length === 0 ? (
+          <p className="text-sm text-text-muted">
+            No confirmed topics. Mark topics as &quot;In&quot; on the Docket page first.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {topics.map((t) => (
+              <label
+                key={t.id}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedTopicIds.has(t.id)}
+                  onChange={() => toggleTopic(t.id)}
+                  className="accent-accent"
+                />
+                <span className="text-sm text-text-primary">{t.title}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 border-b border-border space-y-3">
+        <div>
+          <label className="block text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
+            Episode Context (optional)
+          </label>
+          <textarea
+            value={episodeContext}
+            onChange={(e) => setEpisodeContext(e.target.value)}
+            placeholder="Any specific framing or focus for this episode..."
+            rows={3}
+            className="w-full bg-bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors resize-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setGuestMode(!guestMode)}
+            className={`relative w-9 h-5 rounded-full transition-colors ${
+              guestMode ? "bg-accent" : "bg-bg-elevated border border-border"
+            }`}
+          >
+            <div
+              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                guestMode ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-sm text-text-secondary flex items-center gap-1.5">
+            <User size={14} /> Guest Episode
+          </span>
+        </div>
+
+        {guestMode && (
+          <div className="space-y-2 pl-2 border-l-2 border-accent/30">
+            <input
+              type="text"
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              placeholder="Guest name..."
+              className="w-full bg-bg-elevated border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
+            />
+            <textarea
+              value={guestBio}
+              onChange={(e) => setGuestBio(e.target.value)}
+              placeholder="Guest bio / relevant background..."
+              rows={2}
+              className="w-full bg-bg-elevated border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors resize-none"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 mt-auto">
+        {error && (
+          <div className="mb-3 p-3 bg-error/10 border border-error/20 rounded-lg text-sm text-error">
+            {error}
+          </div>
+        )}
+        {generating ? (
+          <div className="text-center py-3">
+            <Loader2 size={20} className="animate-spin text-accent mx-auto mb-2" />
+            <p className="text-sm text-text-secondary">{generatingStep}</p>
+          </div>
+        ) : (
+          <button
+            onClick={() => {
+              generateBrief();
+              setConfigOpen(false);
+            }}
+            disabled={selectedTopicIds.size === 0}
+            className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg py-2.5 text-sm transition-colors"
+          >
+            Generate Research Brief
+          </button>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-6 hidden md:block">
         <h1 className="font-display text-5xl text-accent mb-1">RESEARCH BRIEF</h1>
         <p className="text-text-secondary text-sm">
           Generate pre-show research for EP {String(currentEpisode.episode_number).padStart(2, "0")}.
         </p>
       </div>
 
-      <div className="flex gap-4 h-[calc(100vh-220px)]">
-        {/* Left: Brief Builder (35%) */}
-        <div className="w-[35%] bg-bg-surface border border-border rounded-lg overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-border">
-            <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted mb-3">
-              Confirmed Topics
-            </h3>
-            {topics.length === 0 ? (
-              <p className="text-sm text-text-muted">
-                No confirmed topics. Mark topics as &quot;In&quot; on the Docket page first.
-              </p>
-            ) : (
-              <div className="space-y-1.5">
-                {topics.map((t) => (
-                  <label
-                    key={t.id}
-                    className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedTopicIds.has(t.id)}
-                      onChange={() => toggleTopic(t.id)}
-                      className="accent-accent"
-                    />
-                    <span className="text-sm text-text-primary">{t.title}</span>
-                  </label>
-                ))}
-              </div>
+      {/* Mobile configure button */}
+      <div className="md:hidden mb-3">
+        <button
+          onClick={() => setConfigOpen(true)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-bg-surface border border-border rounded-lg text-sm text-text-secondary active:bg-bg-elevated transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <SlidersHorizontal size={14} />
+            Configure brief
+            {selectedTopicIds.size > 0 && (
+              <span className="text-text-muted">· {selectedTopicIds.size} topic{selectedTopicIds.size > 1 ? "s" : ""}</span>
             )}
-          </div>
+          </span>
+          <ChevronRight size={14} className="text-text-muted" />
+        </button>
+      </div>
 
-          <div className="p-4 border-b border-border space-y-3">
-            <div>
-              <label className="block text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
-                Episode Context (optional)
-              </label>
-              <textarea
-                value={episodeContext}
-                onChange={(e) => setEpisodeContext(e.target.value)}
-                placeholder="Any specific framing or focus for this episode..."
-                rows={3}
-                className="w-full bg-bg-elevated border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors resize-none"
-              />
-            </div>
+      <TopSheet open={configOpen} onClose={() => setConfigOpen(false)} title="Configure brief">
+        <div className="flex flex-col">{briefBuilder}</div>
+      </TopSheet>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setGuestMode(!guestMode)}
-                className={`relative w-9 h-5 rounded-full transition-colors ${
-                  guestMode ? "bg-accent" : "bg-bg-elevated border border-border"
-                }`}
-              >
-                <div
-                  className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                    guestMode ? "translate-x-4" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-              <span className="text-sm text-text-secondary flex items-center gap-1.5">
-                <User size={14} /> Guest Episode
-              </span>
-            </div>
-
-            {guestMode && (
-              <div className="space-y-2 pl-2 border-l-2 border-accent/30">
-                <input
-                  type="text"
-                  value={guestName}
-                  onChange={(e) => setGuestName(e.target.value)}
-                  placeholder="Guest name..."
-                  className="w-full bg-bg-elevated border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors"
-                />
-                <textarea
-                  value={guestBio}
-                  onChange={(e) => setGuestBio(e.target.value)}
-                  placeholder="Guest bio / relevant background..."
-                  rows={2}
-                  className="w-full bg-bg-elevated border border-border rounded-md px-3 py-1.5 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent transition-colors resize-none"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 mt-auto">
-            {error && (
-              <div className="mb-3 p-3 bg-error/10 border border-error/20 rounded-lg text-sm text-error">
-                {error}
-              </div>
-            )}
-            {generating ? (
-              <div className="text-center py-3">
-                <Loader2 size={20} className="animate-spin text-accent mx-auto mb-2" />
-                <p className="text-sm text-text-secondary">{generatingStep}</p>
-              </div>
-            ) : (
-              <button
-                onClick={generateBrief}
-                disabled={selectedTopicIds.size === 0}
-                className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg py-2.5 text-sm transition-colors"
-              >
-                Generate Research Brief
-              </button>
-            )}
-          </div>
+      <div className="flex flex-col md:flex-row gap-4 md:h-[calc(100vh-220px)]">
+        {/* Left: Brief Builder — hidden on mobile, inline on desktop */}
+        <div className="hidden md:flex w-[35%] bg-bg-surface border border-border rounded-lg overflow-hidden flex-col">
+          {briefBuilder}
         </div>
 
-        {/* Right: Brief Output (65%) */}
-        <div className="w-[65%] bg-bg-surface border border-border rounded-lg overflow-hidden flex flex-col">
-          {/* Toolbar */}
-          <div className="p-3 border-b border-border flex items-center gap-2">
+        {/* Right: Brief Output (65% on desktop, 100% on mobile) */}
+        <div className="w-full md:w-[65%] flex-1 bg-bg-surface border border-border rounded-lg overflow-hidden flex flex-col min-h-[60vh] md:min-h-0">
+          {/* Toolbar — sticky on mobile for quick access during episode */}
+          <div className="sticky top-0 z-10 p-3 border-b border-border flex items-center gap-2 overflow-x-auto no-scrollbar bg-bg-surface">
             <button
               onClick={copyAll}
               disabled={sections.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary hover:border-text-muted transition-colors disabled:opacity-50"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary hover:border-text-muted transition-colors disabled:opacity-50"
             >
               <Copy size={14} /> Copy All
             </button>
             <button
               onClick={downloadMarkdown}
               disabled={sections.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary hover:border-text-muted transition-colors disabled:opacity-50"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary hover:border-text-muted transition-colors disabled:opacity-50"
             >
-              <Download size={14} /> Download .md
+              <Download size={14} /> <span className="hidden sm:inline">Download .md</span><span className="sm:hidden">.md</span>
             </button>
             <div className="flex-1" />
             <button
               onClick={() => router.push("/runsheet")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary transition-colors"
+              className="shrink-0 hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-elevated border border-border text-text-secondary text-sm hover:text-text-primary transition-colors"
             >
               <ArrowRight size={14} /> Runsheet
             </button>
             <button
               onClick={() => router.push("/prep")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/15 text-accent text-sm hover:bg-accent/25 transition-colors"
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-accent/15 text-accent text-sm hover:bg-accent/25 transition-colors"
             >
-              <ArrowRight size={14} /> Go to Prep
+              <ArrowRight size={14} /> <span className="hidden sm:inline">Go to </span>Prep
             </button>
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6">
             {sections.length === 0 ? (
               <div className="text-center py-16 text-text-muted">
                 <p className="text-sm mb-1">No research brief generated yet.</p>
@@ -388,7 +421,7 @@ export default function ResearchPage() {
                           <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1">Core Thesis</h4>
                           <p className="text-sm text-text-secondary">{section.core_thesis}</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <h4 className="text-[11px] font-medium uppercase tracking-wider text-success mb-1">Steel Man</h4>
                             <p className="text-sm text-text-secondary">{section.steel_man}</p>

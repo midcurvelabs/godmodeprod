@@ -1,0 +1,237 @@
+import { NextResponse } from "next/server";
+import { getSupabaseServer } from "@/lib/supabase/server";
+import { ensureLatestEpisode, SKILL_REGISTRY } from "@godmodeprod/shared";
+
+/**
+ * Telegram Bot webhook.
+ *
+ * Register once (outside of this handler) with:
+ *   POST https://api.telegram.org/bot<TOKEN>/setWebhook
+ *        url=https://<host>/api/telegram/webhook
+ *        secret_token=<TELEGRAM_WEBHOOK_SECRET>
+ *
+ * Supported commands:
+ *   /docket <url> [note]   — add a topic to the latest episode
+ *   /list                  — reply with titles of last 10 topics on latest episode
+ */
+
+interface TgUser {
+  id: number;
+  first_name?: string;
+  username?: string;
+}
+
+interface TgChat {
+  id: number;
+}
+
+interface TgMessage {
+  message_id: number;
+  from?: TgUser;
+  chat: TgChat;
+  text?: string;
+}
+
+interface TgUpdate {
+  update_id: number;
+  message?: TgMessage;
+}
+
+const URL_RE = /https?:\/\/\S+/i;
+
+async function sendMessage(chatId: number, text: string, replyTo?: number) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        reply_to_message_id: replyTo,
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch {
+    // Non-fatal — user gets no ack, but the topic was still created.
+  }
+}
+
+function parseAllowedChats(): Set<string> {
+  const raw = process.env.TELEGRAM_ALLOWED_CHATS || "";
+  return new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
+}
+
+function submitterFrom(user?: TgUser): string {
+  if (!user) return "Telegram";
+  const first = user.first_name || "";
+  const handle = user.username ? `@${user.username}` : "";
+  return [first, handle].filter(Boolean).join(" ") || "Telegram";
+}
+
+export async function POST(request: Request) {
+  // 1. Verify secret token header.
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const headerSecret = request.headers.get("x-telegram-bot-api-secret-token");
+  if (!secret || headerSecret !== secret) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  let update: TgUpdate;
+  try {
+    update = (await request.json()) as TgUpdate;
+  } catch {
+    return NextResponse.json({ ok: true });
+  }
+
+  const message = update.message;
+  if (!message || !message.text) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // 3. Check chat allow-list. Silently ack if not allowed — don't leak bot existence.
+  const allowed = parseAllowedChats();
+  if (!allowed.has(String(message.chat.id))) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const text = message.text.trim();
+
+  // Only handle known commands.
+  if (!text.startsWith("/docket") && !text.startsWith("/list")) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const supabase = getSupabaseServer();
+
+  // MVP: single show assumption.
+  const { data: shows } = await supabase.from("shows").select("id").limit(1);
+  const showId = shows?.[0]?.id as string | undefined;
+  if (!showId) {
+    await sendMessage(message.chat.id, "⚠️ No show configured.", message.message_id);
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- /list ---
+  if (text.startsWith("/list")) {
+    const episode = await ensureLatestEpisode(supabase, showId);
+    const { data: topics } = await supabase
+      .from("docket_topics")
+      .select("title, status")
+      .eq("episode_id", episode.id)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    const epLabel = `EP ${String(episode.episode_number).padStart(2, "0")}`;
+    if (!topics || topics.length === 0) {
+      await sendMessage(message.chat.id, `${epLabel} has no topics yet.`, message.message_id);
+    } else {
+      const lines = topics.map((t, i) => `${i + 1}. ${t.title} [${t.status}]`);
+      await sendMessage(
+        message.chat.id,
+        `${epLabel} — last ${topics.length} topics:\n${lines.join("\n")}`,
+        message.message_id
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- /docket <url> [note] ---
+  // Strip the command token.
+  const afterCommand = text.replace(/^\/docket(@\S+)?\s*/, "");
+  const urlMatch = afterCommand.match(URL_RE);
+  const url = urlMatch?.[0];
+  const note = afterCommand
+    .replace(URL_RE, "")
+    .trim()
+    .replace(/^[-—:]\s*/, "");
+
+  if (!url && !note) {
+    await sendMessage(
+      message.chat.id,
+      "Usage: /docket <url> [note]",
+      message.message_id
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // 5. Ensure latest episode.
+  let episode;
+  try {
+    episode = await ensureLatestEpisode(supabase, showId);
+  } catch (err) {
+    await sendMessage(
+      message.chat.id,
+      `⚠️ Failed to resolve episode: ${err instanceof Error ? err.message : "unknown"}`,
+      message.message_id
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  const isLocked = episode.status === "docket_locked";
+
+  // Find next sort_order for this episode.
+  const { data: existing } = await supabase
+    .from("docket_topics")
+    .select("sort_order")
+    .eq("episode_id", episode.id)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+  const nextOrder = existing && existing.length > 0 ? existing[0].sort_order + 1 : 0;
+
+  const title = note || url || "Untitled";
+
+  // 6. Insert topic.
+  const { data: topic, error: insertError } = await supabase
+    .from("docket_topics")
+    .insert({
+      episode_id: episode.id,
+      show_id: showId,
+      title,
+      context: "",
+      angle: "",
+      sources: [],
+      original_url: url || "",
+      submitted_by: submitterFrom(message.from),
+      status: isLocked ? "in" : "under_review",
+      sort_order: nextOrder,
+    })
+    .select()
+    .single();
+
+  if (insertError || !topic) {
+    await sendMessage(
+      message.chat.id,
+      `⚠️ Failed to add: ${insertError?.message || "unknown"}`,
+      message.message_id
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // 7. Dispatch enrichment job only if we have a URL.
+  if (url) {
+    await supabase.from("jobs").insert({
+      show_id: showId,
+      episode_id: episode.id,
+      queue: SKILL_REGISTRY["docket-add"]?.queue || "ai-jobs",
+      job_type: "docket-add",
+      status: "pending",
+      payload: {
+        topicId: topic.id,
+        showId,
+        episodeId: episode.id,
+        url,
+      },
+    });
+  }
+
+  // 8. Ack.
+  const epLabel = `EP ${String(episode.episode_number).padStart(2, "0")}`;
+  const reply = url
+    ? `✅ Added to ${epLabel} — enriching now.`
+    : `✅ Added to ${epLabel}.`;
+  await sendMessage(message.chat.id, reply, message.message_id);
+
+  return NextResponse.json({ ok: true });
+}

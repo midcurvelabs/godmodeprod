@@ -51,20 +51,20 @@ export function EpisodeBar() {
 
   return (
     <>
-      <header className="h-14 bg-bg-surface border-b border-border flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <div className="relative" ref={dropdownRef}>
+      <header className="h-14 bg-bg-surface border-b border-border flex items-center justify-between px-3 sm:px-6 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <div className="relative min-w-0" ref={dropdownRef}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-bg-elevated border border-border hover:border-text-muted transition-colors text-sm"
+              className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-md bg-bg-elevated border border-border hover:border-text-muted transition-colors text-sm min-w-0"
             >
               {currentEpisode ? (
                 <>
-                  <span className="font-display text-lg text-accent">
+                  <span className="font-display text-base sm:text-lg text-accent shrink-0">
                     EP {String(currentEpisode.episode_number).padStart(2, "0")}
                   </span>
-                  <span className="text-text-secondary">—</span>
-                  <span className="text-text-primary truncate max-w-[200px]">
+                  <span className="text-text-secondary hidden sm:inline">—</span>
+                  <span className="text-text-primary truncate max-w-[120px] sm:max-w-[200px] hidden sm:inline">
                     {currentEpisode.title}
                   </span>
                 </>
@@ -114,19 +114,21 @@ export function EpisodeBar() {
           </div>
 
           {currentEpisode && (
-            <StatusPill
-              status={statusToPillType(currentEpisode.status)}
-              label={currentEpisode.status.replace(/_/g, " ")}
-            />
+            <div className="hidden sm:block">
+              <StatusPill
+                status={statusToPillType(currentEpisode.status)}
+                label={currentEpisode.status.replace(/_/g, " ")}
+              />
+            </div>
           )}
         </div>
 
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium transition-colors shrink-0"
         >
           <Plus size={16} />
-          <span>New Episode</span>
+          <span className="hidden sm:inline">New Episode</span>
         </button>
       </header>
 
