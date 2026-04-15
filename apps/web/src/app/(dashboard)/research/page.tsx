@@ -207,35 +207,36 @@ export default function ResearchPage() {
 
   const briefBuilder = (
     <>
-      <div className="p-4 border-b border-border">
-        <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted mb-3">
-          Confirmed Topics
-        </h3>
-        {topics.length === 0 ? (
-          <p className="text-sm text-text-muted">
-            No confirmed topics. Mark topics as &quot;In&quot; on the Docket page first.
-          </p>
-        ) : (
-          <div className="space-y-1.5">
-            {topics.map((t) => (
-              <label
-                key={t.id}
-                className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedTopicIds.has(t.id)}
-                  onChange={() => toggleTopic(t.id)}
-                  className="accent-accent"
-                />
-                <span className="text-sm text-text-primary">{t.title}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="flex-1 md:overflow-y-auto min-h-0">
+        <div className="p-4 border-b border-border">
+          <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted mb-3">
+            Confirmed Topics
+          </h3>
+          {topics.length === 0 ? (
+            <p className="text-sm text-text-muted">
+              No confirmed topics. Mark topics as &quot;In&quot; on the Docket page first.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {topics.map((t) => (
+                <label
+                  key={t.id}
+                  className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedTopicIds.has(t.id)}
+                    onChange={() => toggleTopic(t.id)}
+                    className="accent-accent"
+                  />
+                  <span className="text-sm text-text-primary">{t.title}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
 
-      <div className="p-4 border-b border-border space-y-3">
+        <div className="p-4 border-b border-border space-y-3">
         <div>
           <label className="block text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">
             Episode Context (optional)
@@ -285,9 +286,10 @@ export default function ResearchPage() {
             />
           </div>
         )}
+        </div>
       </div>
 
-      <div className="p-4 mt-auto">
+      <div className="p-4 border-t border-border shrink-0">
         {error && (
           <div className="mb-3 p-3 bg-error/10 border border-error/20 rounded-lg text-sm text-error">
             {error}
