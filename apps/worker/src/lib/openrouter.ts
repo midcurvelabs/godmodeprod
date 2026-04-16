@@ -70,6 +70,11 @@ export async function callOpenRouter({
     params.reasoning = { effort: modelConfig.extendedThinking };
   }
 
+  // Force JSON response — eliminates markdown-fence wrapping.
+  if (modelConfig.jsonObject) {
+    params.response_format = { type: "json_object" };
+  }
+
   const MAX_ATTEMPTS = 3;
   let lastErr: unknown;
 

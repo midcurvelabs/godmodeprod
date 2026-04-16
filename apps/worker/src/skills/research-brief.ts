@@ -38,20 +38,20 @@ Output ONLY valid JSON: { "facts": [ ... ] }`;
 
 const SYNTH_PROMPT = `You are a podcast research synthesist for a tech/web3/AI podcast called "God Mode Pod".
 
-You will receive verified facts for each topic. Your job: turn facts into a debate-ready brief the hosts can run with.
+You will receive verified facts for each topic. Turn facts into a debate-ready brief the hosts can run with. BE CONCISE — hosts skim this live; prose must be dense, not flowery.
 
-For each topic, output a JSON object with these fields:
+For each topic, output a JSON object with these fields (keep each field tight):
 - topic_title: the topic name
-- what_happened: 2-3 sentences (use the facts provided; do not invent new ones)
-- core_thesis: the central argument or position to explore
-- steel_man: the strongest case FOR this position
-- straw_man: the weakest/most common counterargument to knock down
-- analogy: the best analogy to explain this to a smart non-expert
+- what_happened: 2 sentences max, using the facts provided (do not invent new ones)
+- core_thesis: 1 sentence — the central argument to explore
+- steel_man: 2 sentences max — the strongest case FOR this position
+- straw_man: 2 sentences max — the weakest/most common counterargument
+- analogy: 1-2 sentences — the best analogy for a smart non-expert
 - data_points: the verified data points passed in (keep them verbatim, with sources)
-- sample_dialogue: a snippet of how hosts might naturally discuss this (2-3 exchanges)
-- connecting_threads: array of 2-3 links to other topics, broader trends, or past episodes
+- sample_dialogue: ONE short exchange only (2 lines total, ~1 sentence each)
+- connecting_threads: array of 2 short bullet-style links (1 sentence each)
 
-Output ONLY valid JSON: { "sections": [ ... ] }`;
+Output ONLY valid JSON (no markdown fences): { "sections": [ ... ] }`;
 
 // --- Single-stage fallback (Sonnet 4.6 only) ---
 
@@ -161,13 +161,23 @@ export async function execute(
       context,
     });
 
+    // jsonObject mode guarantees the response is valid JSON (no markdown
+    // fences, no preamble). If it doesn't parse, something is seriously wrong
+    // upstream — fail loudly.
     let synthParseError: string | null = null;
     try {
-      const jsonMatch = synthResponse.match(/\{[\s\S]*\}/);
-      briefContent = jsonMatch ? JSON.parse(jsonMatch[0]) : { sections: [] };
+      briefContent = JSON.parse(synthResponse);
     } catch (e) {
       synthParseError = e instanceof Error ? e.message : String(e);
-      briefContent = { raw: synthResponse, sections: [] };
+      // Fallback: try to extract JSON from the response in case upstream
+      // still wrapped it somehow.
+      const jsonMatch = synthResponse.match(/\{[\s\S]*\}/);
+      try {
+        briefContent = jsonMatch ? JSON.parse(jsonMatch[0]) : { sections: [] };
+        synthParseError = null;
+      } catch {
+        briefContent = { raw: synthResponse, sections: [] };
+      }
     }
 
     // Attach raw facts for provenance

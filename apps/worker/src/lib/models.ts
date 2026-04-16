@@ -22,6 +22,9 @@ export interface ModelConfig {
   maxTokens?: number;
   // Claude extended thinking via OpenRouter: passed as `reasoning: { effort }`
   extendedThinking?: "low" | "medium" | "high";
+  // Force JSON response. Sent as `response_format: { type: "json_object" }`.
+  // Eliminates markdown-fence wrapping and guarantees valid JSON output.
+  jsonObject?: boolean;
 }
 
 export type SkillKey =
@@ -61,11 +64,11 @@ export const MODEL_ROUTING: Record<SkillKey, ModelConfig> = {
 
   // research-brief is split into 2 stages (Grok facts → Sonnet synth).
   // The single-stage "research-brief" key is kept as a fallback.
-  // maxTokens sized for 20 topics × ~800 tokens/section; 8192 truncated synth
-  // output mid-JSON so parse failed and stored empty sections.
-  "research-brief-facts": { via: "openrouter", model: GROK_FAST, maxTokens: 8192 },
-  "research-brief-synth": { via: "openrouter", model: SONNET, maxTokens: 32000 },
-  "research-brief": { via: "openrouter", model: SONNET, maxTokens: 32000 },
+  // Synth at 64K because 20+ topics × 9 fields each can easily blow past 32K
+  // output tokens; Sonnet 4.6 supports up to 128K.
+  "research-brief-facts": { via: "openrouter", model: GROK_FAST, maxTokens: 8192, jsonObject: true },
+  "research-brief-synth": { via: "openrouter", model: SONNET, maxTokens: 64000, jsonObject: true },
+  "research-brief": { via: "openrouter", model: SONNET, maxTokens: 64000, jsonObject: true },
 
   "tight-questions": { via: "openrouter", model: HAIKU, maxTokens: 4096 },
   "hook-writing": { via: "openrouter", model: HAIKU, maxTokens: 2048 },
