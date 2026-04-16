@@ -26,9 +26,43 @@ interface BriefSection {
   steel_man: string;
   straw_man: string;
   analogy: string;
-  data_points: string[];
-  sample_dialogue: string;
-  connecting_threads: string[];
+  // Shape varies — synth may emit objects like {fact, source_url} or plain strings
+  data_points: unknown;
+  // May arrive as string OR array of {host, line} dialogue turns
+  sample_dialogue: unknown;
+  connecting_threads: unknown;
+}
+
+// --- Defensive normalizers ---
+// The LLM sometimes returns richer shapes than the UI's original string/array
+// assumptions (e.g. data_points as [{fact, source_url}], sample_dialogue as
+// [{host, line}]). Normalize to strings so React doesn't crash trying to render
+// raw objects.
+function toStringMaybeObj(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) return v.map(toStringMaybeObj).join(" • ");
+  if (typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    // Dialogue turn shapes
+    const host = obj.host ?? obj.speaker ?? obj.name;
+    const line = obj.line ?? obj.text ?? obj.dialogue ?? obj.quote;
+    if (host && line) return `${host}: ${line}`;
+    // Data-point shapes
+    const fact = obj.fact ?? obj.point ?? obj.value ?? obj.statement ?? obj.data ?? line;
+    const source = obj.source_url ?? obj.source ?? obj.url;
+    if (fact && source) return `${fact} (${source})`;
+    if (fact) return String(fact);
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
+function toStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map(toStringMaybeObj).filter(Boolean);
+  if (typeof v === "string" && v.trim()) return [v];
+  return [];
 }
 
 export default function ResearchPage() {
@@ -163,27 +197,26 @@ export default function ResearchPage() {
     }
   }
 
+  function sectionToMarkdown(s: BriefSection): string {
+    const dp = toStringArray(s.data_points).map((d) => `- ${d}`).join("\n");
+    const ct = toStringArray(s.connecting_threads).map((t) => `- ${t}`).join("\n");
+    const dlg = Array.isArray(s.sample_dialogue)
+      ? toStringArray(s.sample_dialogue).join("\n")
+      : toStringMaybeObj(s.sample_dialogue);
+    return `# ${s.topic_title}\n\n## What Happened\n${s.what_happened}\n\n## Core Thesis\n${s.core_thesis}\n\n## Steel Man\n${s.steel_man}\n\n## Straw Man\n${s.straw_man}\n\n## Analogy\n${s.analogy}\n\n## Data Points\n${dp}\n\n## Sample Dialogue\n${dlg}\n\n## Connecting Threads\n${ct}`;
+  }
+
   function copyAll() {
     const sections = (brief?.content as { sections?: BriefSection[] })?.sections;
     if (!sections) return;
-    const text = sections
-      .map(
-        (s) =>
-          `# ${s.topic_title}\n\n## What Happened\n${s.what_happened}\n\n## Core Thesis\n${s.core_thesis}\n\n## Steel Man\n${s.steel_man}\n\n## Straw Man\n${s.straw_man}\n\n## Analogy\n${s.analogy}\n\n## Data Points\n${s.data_points.map((d) => `- ${d}`).join("\n")}\n\n## Sample Dialogue\n${s.sample_dialogue}\n\n## Connecting Threads\n${s.connecting_threads.map((t) => `- ${t}`).join("\n")}`
-      )
-      .join("\n\n---\n\n");
+    const text = sections.map(sectionToMarkdown).join("\n\n---\n\n");
     navigator.clipboard.writeText(text);
   }
 
   function downloadMarkdown() {
     const sections = (brief?.content as { sections?: BriefSection[] })?.sections;
     if (!sections) return;
-    const text = sections
-      .map(
-        (s) =>
-          `# ${s.topic_title}\n\n## What Happened\n${s.what_happened}\n\n## Core Thesis\n${s.core_thesis}\n\n## Steel Man\n${s.steel_man}\n\n## Straw Man\n${s.straw_man}\n\n## Analogy\n${s.analogy}\n\n## Data Points\n${s.data_points.map((d) => `- ${d}`).join("\n")}\n\n## Sample Dialogue\n${s.sample_dialogue}\n\n## Connecting Threads\n${s.connecting_threads.map((t) => `- ${t}`).join("\n")}`
-      )
-      .join("\n\n---\n\n");
+    const text = sections.map(sectionToMarkdown).join("\n\n---\n\n");
     const blob = new Blob([text], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -440,7 +473,7 @@ export default function ResearchPage() {
                         <div>
                           <h4 className="text-[11px] font-medium uppercase tracking-wider text-warning mb-1">Data Points</h4>
                           <div className="space-y-1">
-                            {section.data_points.map((d, j) => (
+                            {toStringArray(section.data_points).map((d, j) => (
                               <div key={j} className="bg-warning/5 border border-warning/20 rounded px-3 py-1.5 text-sm text-text-secondary">
                                 {d}
                               </div>
@@ -449,14 +482,16 @@ export default function ResearchPage() {
                         </div>
                         <div>
                           <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1">Sample Dialogue</h4>
-                          <div className="bg-bg-elevated rounded-lg p-3 italic text-sm text-text-secondary border-l-2 border-accent/30">
-                            {section.sample_dialogue}
+                          <div className="bg-bg-elevated rounded-lg p-3 italic text-sm text-text-secondary border-l-2 border-accent/30 whitespace-pre-line">
+                            {Array.isArray(section.sample_dialogue)
+                              ? toStringArray(section.sample_dialogue).join("\n")
+                              : toStringMaybeObj(section.sample_dialogue)}
                           </div>
                         </div>
                         <div>
                           <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1">Connecting Threads</h4>
                           <div className="flex flex-wrap gap-1.5">
-                            {section.connecting_threads.map((t, j) => (
+                            {toStringArray(section.connecting_threads).map((t, j) => (
                               <span key={j} className="px-2 py-0.5 bg-bg-elevated rounded text-[11px] text-text-secondary border border-border">
                                 {t}
                               </span>
