@@ -161,15 +161,32 @@ export async function execute(
       context,
     });
 
+    let synthParseError: string | null = null;
     try {
       const jsonMatch = synthResponse.match(/\{[\s\S]*\}/);
       briefContent = jsonMatch ? JSON.parse(jsonMatch[0]) : { sections: [] };
-    } catch {
+    } catch (e) {
+      synthParseError = e instanceof Error ? e.message : String(e);
       briefContent = { raw: synthResponse, sections: [] };
     }
 
     // Attach raw facts for provenance
     briefContent._facts_stage = factsData;
+
+    // Fail loudly if synth produced no usable sections — otherwise we'd
+    // silently save an empty brief and the UI would render "No research brief
+    // generated yet" with no explanation. Common cause: synth response
+    // truncated by max_tokens so the JSON never closes.
+    const parsedSections = (briefContent as { sections?: unknown[] }).sections;
+    if (!Array.isArray(parsedSections) || parsedSections.length === 0) {
+      const tail = synthResponse.slice(-200).replace(/\s+/g, " ");
+      throw new Error(
+        `Research brief synth returned no parseable sections` +
+          (synthParseError ? ` (parse error: ${synthParseError})` : ``) +
+          `. Response likely truncated — raise max_tokens in lib/models.ts. ` +
+          `Response tail: "...${tail}"`
+      );
+    }
   }
 
   // Save to database

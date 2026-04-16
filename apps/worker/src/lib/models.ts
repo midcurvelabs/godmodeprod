@@ -61,9 +61,11 @@ export const MODEL_ROUTING: Record<SkillKey, ModelConfig> = {
 
   // research-brief is split into 2 stages (Grok facts → Sonnet synth).
   // The single-stage "research-brief" key is kept as a fallback.
-  "research-brief-facts": { via: "openrouter", model: GROK_FAST, maxTokens: 4096 },
-  "research-brief-synth": { via: "openrouter", model: SONNET, maxTokens: 8192 },
-  "research-brief": { via: "openrouter", model: SONNET, maxTokens: 8192 },
+  // maxTokens sized for 20 topics × ~800 tokens/section; 8192 truncated synth
+  // output mid-JSON so parse failed and stored empty sections.
+  "research-brief-facts": { via: "openrouter", model: GROK_FAST, maxTokens: 8192 },
+  "research-brief-synth": { via: "openrouter", model: SONNET, maxTokens: 32000 },
+  "research-brief": { via: "openrouter", model: SONNET, maxTokens: 32000 },
 
   "tight-questions": { via: "openrouter", model: HAIKU, maxTokens: 4096 },
   "hook-writing": { via: "openrouter", model: HAIKU, maxTokens: 2048 },
