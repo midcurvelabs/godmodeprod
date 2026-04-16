@@ -31,6 +31,21 @@ function buildContextBlock(context: SkillContext): string {
   ].join("\n");
 }
 
+// OpenRouter occasionally returns HTTP 200 with Content-Type: application/json
+// but an empty/truncated body (usually when the upstream provider connection
+// drops mid-stream). The OpenAI SDK only auto-retries on 5xx/408/409/429, so
+// it surfaces those as `TypeError: invalid json response body ... Unexpected
+// end of JSON input` and fails the job. We retry those here.
+function isTransientOpenRouterError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /invalid json response body/i.test(msg) ||
+    /Unexpected end of JSON input/i.test(msg) ||
+    /fetch failed/i.test(msg) ||
+    /ECONNRESET|ETIMEDOUT|socket hang up/i.test(msg)
+  );
+}
+
 export async function callOpenRouter({
   systemPrompt,
   userPrompt,
@@ -55,17 +70,43 @@ export async function callOpenRouter({
     params.reasoning = { effort: modelConfig.extendedThinking };
   }
 
-  const response = await client.chat.completions.create(
-    params as unknown as Parameters<typeof client.chat.completions.create>[0]
-  );
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown;
 
-  // Cast to non-streaming response (we never pass stream:true).
-  const completion = response as OpenAI.Chat.Completions.ChatCompletion;
-  const text = completion.choices[0]?.message?.content;
-  if (!text) {
-    throw new Error(
-      `No text returned from OpenRouter (model=${modelConfig.model})`
-    );
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await client.chat.completions.create(
+        params as unknown as Parameters<typeof client.chat.completions.create>[0]
+      );
+
+      // Cast to non-streaming response (we never pass stream:true).
+      const completion = response as OpenAI.Chat.Completions.ChatCompletion;
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
+        throw new Error(
+          `No text returned from OpenRouter (model=${modelConfig.model})`
+        );
+      }
+      return text;
+    } catch (err) {
+      lastErr = err;
+      if (attempt === MAX_ATTEMPTS || !isTransientOpenRouterError(err)) {
+        break;
+      }
+      const backoffMs = 500 * Math.pow(2, attempt - 1); // 500, 1000, 2000ms
+      console.warn(
+        `[openrouter] transient error on attempt ${attempt}/${MAX_ATTEMPTS} (model=${modelConfig.model}): ${
+          err instanceof Error ? err.message : String(err)
+        }. Retrying in ${backoffMs}ms...`
+      );
+      await new Promise((r) => setTimeout(r, backoffMs));
+    }
   }
-  return text;
+
+  // Exhausted retries — surface a clearer error so the UI doesn't just show
+  // the raw SDK TypeError.
+  const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  throw new Error(
+    `OpenRouter call failed after ${MAX_ATTEMPTS} attempts (model=${modelConfig.model}): ${msg}`
+  );
 }
