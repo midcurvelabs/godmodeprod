@@ -13,6 +13,7 @@ import {
   Loader2,
   User,
   SlidersHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import { useEpisodeStore } from "@/lib/stores/episode-store";
 import { useJobPoll } from "@/lib/hooks/use-job-poll";
@@ -63,6 +64,22 @@ function toStringArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.map(toStringMaybeObj).filter(Boolean);
   if (typeof v === "string" && v.trim()) return [v];
   return [];
+}
+
+// Normalize for title matching — case/punctuation/whitespace insensitive.
+function normalizeTitle(s: string): string {
+  return s.toLowerCase().trim().replace(/[^\w\s]/g, "").replace(/\s+/g, " ");
+}
+
+// Derive a friendly label from a URL when there's no title: "x.com", "github.com", etc.
+function hostLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    // Fold twitter.com → x.com for visual consistency
+    return host === "twitter.com" ? "x.com" : host;
+  } catch {
+    return url;
+  }
 }
 
 export default function ResearchPage() {
@@ -197,13 +214,17 @@ export default function ResearchPage() {
     }
   }
 
-  function sectionToMarkdown(s: BriefSection): string {
+  function sectionToMarkdown(s: BriefSection, index: number): string {
     const dp = toStringArray(s.data_points).map((d) => `- ${d}`).join("\n");
     const ct = toStringArray(s.connecting_threads).map((t) => `- ${t}`).join("\n");
     const dlg = Array.isArray(s.sample_dialogue)
       ? toStringArray(s.sample_dialogue).join("\n")
       : toStringMaybeObj(s.sample_dialogue);
-    return `# ${s.topic_title}\n\n## What Happened\n${s.what_happened}\n\n## Core Thesis\n${s.core_thesis}\n\n## Steel Man\n${s.steel_man}\n\n## Straw Man\n${s.straw_man}\n\n## Analogy\n${s.analogy}\n\n## Data Points\n${dp}\n\n## Sample Dialogue\n${dlg}\n\n## Connecting Threads\n${ct}`;
+    const srcLinks = sourcesForSection(s, index);
+    const sources = srcLinks.length > 0
+      ? `\n\n## Sources\n${srcLinks.map((x) => `- ${x.isOriginal ? "[Original] " : ""}${x.label}: ${x.url}`).join("\n")}`
+      : "";
+    return `# ${s.topic_title}${sources}\n\n## What Happened\n${s.what_happened}\n\n## Core Thesis\n${s.core_thesis}\n\n## Steel Man\n${s.steel_man}\n\n## Straw Man\n${s.straw_man}\n\n## Analogy\n${s.analogy}\n\n## Data Points\n${dp}\n\n## Sample Dialogue\n${dlg}\n\n## Connecting Threads\n${ct}`;
   }
 
   function copyAll() {
@@ -237,6 +258,42 @@ export default function ResearchPage() {
   }
 
   const sections = (brief?.content as { sections?: BriefSection[] })?.sections || [];
+
+  // Match brief sections back to their originating docket topics so we can show
+  // the user the source tweets/links alongside the research. Match by
+  // normalized title first; fall back to positional index if the LLM reworded
+  // the title slightly.
+  const topicByTitle = new Map<string, DocketTopic>();
+  for (const t of topics) topicByTitle.set(normalizeTitle(t.title), t);
+
+  function sourcesForSection(
+    section: BriefSection,
+    index: number
+  ): Array<{ url: string; label: string; isOriginal: boolean }> {
+    const matched =
+      topicByTitle.get(normalizeTitle(section.topic_title)) ?? topics[index];
+    if (!matched) return [];
+    const seen = new Set<string>();
+    const out: Array<{ url: string; label: string; isOriginal: boolean }> = [];
+    if (matched.original_url) {
+      seen.add(matched.original_url);
+      out.push({
+        url: matched.original_url,
+        label: hostLabel(matched.original_url),
+        isOriginal: true,
+      });
+    }
+    for (const s of matched.sources || []) {
+      if (!s?.url || seen.has(s.url)) continue;
+      seen.add(s.url);
+      out.push({
+        url: s.url,
+        label: s.title?.trim() || hostLabel(s.url),
+        isOriginal: false,
+      });
+    }
+    return out;
+  }
 
   const briefBuilder = (
     <>
@@ -427,7 +484,9 @@ export default function ResearchPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {sections.map((section, i) => (
+                {sections.map((section, i) => {
+                  const sourceLinks = sourcesForSection(section, i);
+                  return (
                   <div key={i} className="border border-border rounded-lg overflow-hidden">
                     <button
                       onClick={() => toggleSection(i)}
@@ -448,6 +507,30 @@ export default function ResearchPage() {
 
                     {expandedSections.has(i) && (
                       <div className="px-4 pb-4 space-y-4">
+                        {sourceLinks.length > 0 && (
+                          <div>
+                            <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1.5">Sources</h4>
+                            <div className="flex flex-wrap gap-1.5">
+                              {sourceLinks.map((s, j) => (
+                                <a
+                                  key={j}
+                                  href={s.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border transition-colors ${
+                                    s.isOriginal
+                                      ? "bg-accent/10 border-accent/30 text-accent hover:bg-accent/20"
+                                      : "bg-bg-elevated border-border text-text-secondary hover:text-text-primary hover:border-text-muted"
+                                  }`}
+                                  title={s.url}
+                                >
+                                  <ExternalLink size={11} />
+                                  {s.isOriginal ? `Original · ${s.label}` : s.label}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <h4 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-1">What Happened</h4>
                           <p className="text-sm text-text-secondary">{section.what_happened}</p>
@@ -510,7 +593,8 @@ export default function ResearchPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
