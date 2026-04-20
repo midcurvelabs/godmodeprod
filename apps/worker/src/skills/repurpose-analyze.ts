@@ -117,40 +117,41 @@ export async function execute(
     throw new Error("No processed transcript found for this episode");
   }
 
-  // Fetch docket topics (status 'in') with source URLs for clip→topic linking.
-  const { data: docketTopics } = await supabase
-    .from("docket_topics")
-    .select("id, title, context, angle, original_url, original_image_url")
-    .eq("episode_id", payload.episodeId)
-    .eq("status", "in")
-    .order("sort_order");
-
-  // Fetch latest runsheet for the episode (if generated) so clip segments can align with planned structure.
-  const { data: runsheetRows } = await supabase
-    .from("runsheets")
-    .select("content")
-    .eq("episode_id", payload.episodeId)
-    .order("generated_at", { ascending: false })
-    .limit(1);
+  // Fetch docket topics, runsheet, hosts, and show context in parallel (all independent of each other).
+  const [
+    { data: docketTopics },
+    { data: runsheetRows },
+    { data: hosts },
+    { data: showContextRows },
+  ] = await Promise.all([
+    supabase
+      .from("docket_topics")
+      .select("id, title, context, angle, original_url, original_image_url")
+      .eq("episode_id", payload.episodeId)
+      .eq("status", "in")
+      .order("sort_order"),
+    supabase
+      .from("runsheets")
+      .select("content")
+      .eq("episode_id", payload.episodeId)
+      .order("generated_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("hosts")
+      .select("id, name, role, voice_characteristics, clip_style")
+      .eq("show_id", payload.showId)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("show_context")
+      .select("context_type, content")
+      .eq("show_id", payload.showId),
+  ]);
 
   const runsheetContent = runsheetRows?.[0]?.content as { segments?: Array<Record<string, unknown>> } | null | undefined;
-
-  // Fetch hosts for speaker matching
-  const { data: hosts } = await supabase
-    .from("hosts")
-    .select("id, name, role, voice_characteristics, clip_style")
-    .eq("show_id", payload.showId)
-    .order("sort_order", { ascending: true });
 
   const hostList = (hosts || [])
     .map((h) => `- ${h.name} (${h.role || "host"}): voice=${h.voice_characteristics || "natural"}, clip_style=${h.clip_style || "not specified"}`)
     .join("\n");
-
-  // Fetch show context
-  const { data: showContextRows } = await supabase
-    .from("show_context")
-    .select("context_type, content")
-    .eq("show_id", payload.showId);
 
   const context = {
     show_slug: "",
