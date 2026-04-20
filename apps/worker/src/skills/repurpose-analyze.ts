@@ -117,6 +117,24 @@ export async function execute(
     throw new Error("No processed transcript found for this episode");
   }
 
+  // Fetch docket topics (status 'in') with source URLs for clip→topic linking.
+  const { data: docketTopics } = await supabase
+    .from("docket_topics")
+    .select("id, title, context, angle, original_url, original_image_url")
+    .eq("episode_id", payload.episodeId)
+    .eq("status", "in")
+    .order("sort_order");
+
+  // Fetch latest runsheet for the episode (if generated) so clip segments can align with planned structure.
+  const { data: runsheetRows } = await supabase
+    .from("runsheets")
+    .select("content")
+    .eq("episode_id", payload.episodeId)
+    .order("generated_at", { ascending: false })
+    .limit(1);
+
+  const runsheetContent = runsheetRows?.[0]?.content as { segments?: Array<Record<string, unknown>> } | null | undefined;
+
   // Fetch hosts for speaker matching
   const { data: hosts } = await supabase
     .from("hosts")
@@ -155,7 +173,35 @@ export async function execute(
     }
   }
 
-  const userPrompt = `Here are the podcast hosts. You MUST identify 5-8 clips per host:\n${hostList}\n\nAnalyze this podcast transcript and extract all repurposable content:\n\n${transcript.clean_content}`;
+  // Build docket block (omitted entirely if empty — e.g. solo episode with no confirmed topics)
+  const docketBlock = (docketTopics && docketTopics.length > 0)
+    ? `\nDocket topics for this episode (match clips back to these by id when substance aligns):\n${JSON.stringify(
+        docketTopics.map((t) => ({
+          id: t.id,
+          title: t.title,
+          context: t.context,
+          angle: t.angle,
+          has_source: Boolean(t.original_url),
+        })),
+        null,
+        2
+      )}\n`
+    : "";
+
+  // Build runsheet block — pass only segment names + time labels; skip seed_points (too large, not needed for clip attribution)
+  const runsheetBlock = runsheetContent?.segments?.length
+    ? `\nRunsheet segment structure (use these segment names in topic_segments when segments align):\n${JSON.stringify(
+        runsheetContent.segments.map((s) => ({
+          name: s.name,
+          time_label: s.time_label,
+          duration_minutes: s.duration_minutes,
+        })),
+        null,
+        2
+      )}\n`
+    : "";
+
+  const userPrompt = `Here are the podcast hosts. You MUST identify 5-8 clips per host:\n${hostList}\n${docketBlock}${runsheetBlock}\nAnalyze this podcast transcript and extract all repurposable content:\n\n${transcript.clean_content}`;
 
   const response = await callModel("repurpose-analyze", {
     systemPrompt: SYSTEM_PROMPT,
