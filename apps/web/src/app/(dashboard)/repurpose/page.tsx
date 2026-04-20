@@ -481,7 +481,13 @@ export default function RepurposePage() {
               />
               <div className="flex-1 overflow-y-auto">
                 {activeTab === "overview" && masterAnalysis && (
-                  <TabOverview analysis={masterAnalysis.content as Record<string, unknown>} hostNames={hostNames} />
+                  <TabOverview
+                    analysis={masterAnalysis.content as Record<string, unknown>}
+                    hostNames={hostNames}
+                    outputId={masterAnalysis.id}
+                    docketTopicsById={docketTopicsById}
+                    onUpdateClipLayout={handleUpdateClipLayout}
+                  />
                 )}
                 {activeTab === "shorts" && (
                   <TabShorts outputs={outputs} hosts={hosts} selectedHost={selectedHost} onHumanize={handleHumanize} onRegenerate={handleRegenerate} />
