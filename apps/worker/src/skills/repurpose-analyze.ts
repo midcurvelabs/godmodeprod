@@ -32,6 +32,7 @@ Identify 5-8 clips PER HOST (15-24 total per episode). A clip needs at least ONE
 Output ONLY valid JSON:
 {
   "episode_summary": "3-4 sentence summary of the entire episode",
+  "coverage_note": "One sentence describing how well the actual conversation matched the planned docket. Empty string if no docket topics were provided.",
   "key_moments": [
     {
       "host": "Host name who drove this moment",
@@ -53,7 +54,8 @@ Output ONLY valid JSON:
       "priority": 1,
       "platforms": ["tiktok", "instagram", "youtube_shorts"],
       "why_it_works": "Why this will perform well as a clip",
-      "criteria_met": ["strong_hook", "personal_result", "news_peg", "named_concept", "entertainment"]
+      "criteria_met": ["strong_hook", "personal_result", "news_peg", "named_concept", "entertainment"],
+      "docket_topic_id": null
     }
   ],
   "themes": [
@@ -98,7 +100,10 @@ IMPORTANT:
 - Every host must have 5-8 clips. If you have fewer, re-scan the transcript.
 - Priority 1 clips must have genuinely strong hooks.
 - Timestamps must reference actual transcript positions.
-- Quotable lines must be EXACT quotes, not paraphrased.`;
+- Quotable lines must be EXACT quotes, not paraphrased.
+- If a "Docket topics" list is provided, for each clip set "docket_topic_id" to the UUID of the matching topic when the clip's content clearly maps to that topic. Match on substance (the clip is about that topic), not just keyword overlap. If unsure, leave "docket_topic_id" as null.
+- If a "Runsheet segment structure" is provided, use those exact segment names (e.g. "The Signal", "God Mode Takes") in the "topic" field of topic_segments when a segment aligns.
+- Produce "coverage_note" as a single sentence summarizing docket coverage: mention topics that were skipped or covered in <30 seconds. If no docket was provided, set "coverage_note" to "".`;
 
 export async function execute(
   payload: RepurposeAnalyzePayload
