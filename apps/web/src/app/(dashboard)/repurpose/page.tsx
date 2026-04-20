@@ -50,6 +50,13 @@ interface HostInfo {
   name: string;
 }
 
+interface DocketTopic {
+  id: string;
+  title: string;
+  original_url: string | null;
+  original_image_url: string | null;
+}
+
 const SPEAKER_COLORS = [
   "text-accent",
   "text-emerald-400",
@@ -81,6 +88,7 @@ export default function RepurposePage() {
   const [masterAnalysis, setMasterAnalysis] = useState<RepurposeOutput | null>(null);
   const [outputs, setOutputs] = useState<RepurposeOutput[]>([]);
   const [hosts, setHosts] = useState<HostInfo[]>([]);
+  const [docketTopicsById, setDocketTopicsById] = useState<Record<string, DocketTopic>>({});
 
   // Process state
   const [uploading, setUploading] = useState(false);
@@ -135,11 +143,34 @@ export default function RepurposePage() {
     if (json.hosts) setHosts(json.hosts.map((h: { id: string; name: string }) => ({ id: h.id, name: h.name })));
   }, [currentShow]);
 
+  const fetchDocketTopics = useCallback(async () => {
+    if (!currentEpisode) return;
+    const res = await fetch(`/api/docket/topics?episode_id=${currentEpisode.id}&status=in`);
+    const json = await res.json();
+    const topics = (json.topics || []) as Array<{
+      id: string;
+      title: string;
+      original_url: string | null;
+      original_image_url: string | null;
+    }>;
+    const byId: Record<string, DocketTopic> = {};
+    for (const t of topics) {
+      byId[t.id] = {
+        id: t.id,
+        title: t.title,
+        original_url: t.original_url || null,
+        original_image_url: t.original_image_url || null,
+      };
+    }
+    setDocketTopicsById(byId);
+  }, [currentEpisode]);
+
   useEffect(() => {
     fetchTranscript();
     fetchRepurposeData();
     fetchHosts();
-  }, [fetchTranscript, fetchRepurposeData, fetchHosts]);
+    fetchDocketTopics();
+  }, [fetchTranscript, fetchRepurposeData, fetchHosts, fetchDocketTopics]);
 
   // Poll: transcript processing
   useEffect(() => {
@@ -252,6 +283,36 @@ export default function RepurposePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "regenerate", episodeId: currentEpisode.id, showId: currentShow.id, outputType }),
     });
+  }
+
+  async function handleUpdateClipLayout(
+    outputId: string,
+    clipIndex: number,
+    layoutChoice: "clip_only" | "broll" | "split_screen" | null
+  ) {
+    // Find the output (it's the master analysis output for this episode)
+    const target = masterAnalysis?.id === outputId ? masterAnalysis : null;
+    if (!target) return;
+
+    // Deep clone the content, mutate the one clip's layout_choice, write back.
+    const nextContent = JSON.parse(JSON.stringify(target.content)) as Record<string, unknown>;
+    const clips = (nextContent.clip_candidates || []) as Array<Record<string, unknown>>;
+    if (!clips[clipIndex]) return;
+    clips[clipIndex].layout_choice = layoutChoice;
+    nextContent.clip_candidates = clips;
+
+    // Optimistic update
+    setMasterAnalysis({ ...target, content: nextContent });
+
+    const res = await fetch(`/api/repurpose/${outputId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: nextContent }),
+    });
+    if (!res.ok) {
+      // Revert
+      setMasterAnalysis(target);
+    }
   }
 
   async function handleSaveEdit(outputId: string, content: Record<string, unknown>) {
