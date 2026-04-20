@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, Clock, Film, Quote } from "lucide-react";
 import { CopyButton } from "./copy-button";
+import { ClipSourceStrip, type LayoutChoice } from "./clip-source-strip";
 
 const SPEAKER_COLORS = ["text-accent", "text-emerald-400", "text-blue-400", "text-amber-400", "text-purple-400"];
 const ENERGY_COLORS: Record<string, string> = {
@@ -16,12 +17,32 @@ const PRIORITY_BADGES: Record<number, string> = {
   3: "bg-emerald-500/15 text-emerald-400",
 };
 
+interface DocketTopicLite {
+  id: string;
+  title: string;
+  original_url: string | null;
+  original_image_url: string | null;
+}
+
 interface TabOverviewProps {
   analysis: Record<string, unknown>;
   hostNames: string[];
+  outputId: string;
+  docketTopicsById: Record<string, DocketTopicLite>;
+  onUpdateClipLayout: (
+    outputId: string,
+    clipIndex: number,
+    layoutChoice: LayoutChoice
+  ) => void;
 }
 
-export function TabOverview({ analysis, hostNames }: TabOverviewProps) {
+export function TabOverview({
+  analysis,
+  hostNames,
+  outputId,
+  docketTopicsById,
+  onUpdateClipLayout,
+}: TabOverviewProps) {
   const [expandedMoments, setExpandedMoments] = useState<Set<number>>(new Set());
 
   const moments = (analysis.key_moments || []) as Array<Record<string, unknown>>;
@@ -52,6 +73,13 @@ export function TabOverview({ analysis, hostNames }: TabOverviewProps) {
       </div>
 
       <div className="p-6 space-y-6">
+        {typeof analysis.coverage_note === "string" && analysis.coverage_note.length > 0 && (
+          <div className="bg-bg-elevated border border-border rounded-lg px-3 py-2 text-[13px] text-text-secondary">
+            <span className="text-text-muted mr-1">Docket coverage:</span>
+            {analysis.coverage_note as string}
+          </div>
+        )}
+
         {/* Episode Summary */}
         {analysis.episode_summary ? (
           <div>
@@ -167,6 +195,25 @@ export function TabOverview({ analysis, hostNames }: TabOverviewProps) {
                         <span key={p} className="px-1.5 py-0.5 rounded text-[10px] bg-bg-elevated text-text-muted">{p}</span>
                       ))}
                     </div>
+                    <ClipSourceStrip
+                      sourceUrl={
+                        typeof clip.docket_topic_id === "string"
+                          ? docketTopicsById[clip.docket_topic_id]?.original_url || null
+                          : null
+                      }
+                      sourceImageUrl={
+                        typeof clip.docket_topic_id === "string"
+                          ? docketTopicsById[clip.docket_topic_id]?.original_image_url || null
+                          : null
+                      }
+                      sourceTitle={
+                        typeof clip.docket_topic_id === "string"
+                          ? docketTopicsById[clip.docket_topic_id]?.title || null
+                          : null
+                      }
+                      layoutChoice={(clip.layout_choice as LayoutChoice) ?? null}
+                      onLayoutChange={(next) => onUpdateClipLayout(outputId, i, next)}
+                    />
                   </div>
                 );
               })}
