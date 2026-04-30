@@ -11,7 +11,7 @@ Read-only MCP server. Lets you ask Claude about the docket, topics, research bri
 {
   "mcpServers": {
     "godmodepod-docket": {
-      "url": "https://godmodeprod-web.vercel.app/api/mcp/mcp",
+      "url": "https://prod.godmodepod.com/api/mcp/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_TOKEN"
       }
@@ -30,7 +30,7 @@ If your Claude Desktop version doesn't support remote MCP servers natively, use 
       "args": [
         "-y",
         "mcp-remote",
-        "https://godmodeprod-web.vercel.app/api/mcp/mcp",
+        "https://prod.godmodepod.com/api/mcp/mcp",
         "--header",
         "Authorization: Bearer YOUR_TOKEN"
       ]
