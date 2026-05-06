@@ -172,7 +172,8 @@ The guest wishlist reuses the docket pattern — Telegram in, MCP out — but is
 | Command | Behavior |
 |---|---|
 | `/guest <name \| @handle \| url> [-- note]` | Insert a row into `guests` (status `wishlist`). If a Twitter handle or URL is present, the worker will scrape the profile via FxTwitter; otherwise it works from the name + any URL. Parses the note after `--`. |
-| `/guests` (alias `/wishlist`) | Reply with the last 10 guests in the wishlist with their status. |
+| `/guests` | Reply with the last 10 guests in the wishlist with their status. |
+| `/wishlist` | Reply with the full guest wishlist (names + handles, no status). |
 
 The handler enqueues a `guest-enrich` job (queue `ai-jobs`) — the worker calls Grok‑4‑Fast (same routing as `docket-add`) and updates the guest row with `bio`, `background`, and `original_image_url`. Telegram acks immediately; enrichment is async.
 

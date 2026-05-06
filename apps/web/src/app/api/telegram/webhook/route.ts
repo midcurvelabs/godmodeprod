@@ -15,7 +15,8 @@ import { ensureLatestEpisode, SKILL_REGISTRY } from "@godmodeprod/shared";
  *   /list                  — reply with titles of last 10 topics on latest episode
  *   /guest <name | @handle | url> [-- note]
  *                          — add a guest to the show wishlist (async enrichment)
- *   /guests, /wishlist     — reply with last 10 guests in the wishlist
+ *   /guests                — reply with last 10 guests in the wishlist
+ *   /wishlist              — reply with the full guest wishlist
  */
 
 interface TgUser {
@@ -105,12 +106,19 @@ export async function POST(request: Request) {
 
   // Only handle known commands.
   // NOTE: order matters — `/guests` must be tested before `/guest`.
-  const isGuestList =
-    text.startsWith("/guests") || text.startsWith("/wishlist");
-  const isGuestAdd = !isGuestList && text.startsWith("/guest");
+  const isWishlist = text.startsWith("/wishlist");
+  const isGuestList = text.startsWith("/guests");
+  const isGuestAdd =
+    !isGuestList && !isWishlist && text.startsWith("/guest");
   const isDocket = text.startsWith("/docket");
   const isListCmd = text.startsWith("/list") && !isGuestList;
-  if (!isDocket && !isListCmd && !isGuestAdd && !isGuestList) {
+  if (
+    !isDocket &&
+    !isListCmd &&
+    !isGuestAdd &&
+    !isGuestList &&
+    !isWishlist
+  ) {
     return NextResponse.json({ ok: true });
   }
 
@@ -148,17 +156,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // --- /guests ---
-  if (isGuestList) {
-    const { data: guests } = await supabase
+  // --- /guests (last 10) and /wishlist (full list) ---
+  if (isGuestList || isWishlist) {
+    let q = supabase
       .from("guests")
       .select("name, twitter_handle, status")
       .eq("show_id", showId)
-      .order("created_at", { ascending: false })
-      .limit(10);
+      .order("created_at", { ascending: false });
+    if (isGuestList) q = q.limit(10);
+    const { data: guests } = await q;
 
     if (!guests || guests.length === 0) {
       await sendMessage(message.chat.id, "Guest wishlist is empty.", message.message_id);
+    } else if (isWishlist) {
+      const lines = guests.map((g, i) => {
+        const handle = g.twitter_handle ? ` (@${g.twitter_handle})` : "";
+        return `${i + 1}. ${g.name}${handle}`;
+      });
+      await sendMessage(
+        message.chat.id,
+        `Guest wishlist (${guests.length}):\n${lines.join("\n")}`,
+        message.message_id
+      );
     } else {
       const lines = guests.map((g, i) => {
         const handle = g.twitter_handle ? ` (@${g.twitter_handle})` : "";
