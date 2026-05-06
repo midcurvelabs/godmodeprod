@@ -15,7 +15,7 @@ import { ensureLatestEpisode, SKILL_REGISTRY } from "@godmodeprod/shared";
  *   /list                  — reply with titles of last 10 topics on latest episode
  *   /guest <name | @handle | url> [-- note]
  *                          — add a guest to the show wishlist (async enrichment)
- *   /guests                — reply with last 10 guests in the wishlist
+ *   /guests, /wishlist     — reply with last 10 guests in the wishlist
  */
 
 interface TgUser {
@@ -105,7 +105,8 @@ export async function POST(request: Request) {
 
   // Only handle known commands.
   // NOTE: order matters — `/guests` must be tested before `/guest`.
-  const isGuestList = text.startsWith("/guests");
+  const isGuestList =
+    text.startsWith("/guests") || text.startsWith("/wishlist");
   const isGuestAdd = !isGuestList && text.startsWith("/guest");
   const isDocket = text.startsWith("/docket");
   const isListCmd = text.startsWith("/list") && !isGuestList;
