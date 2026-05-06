@@ -31,6 +31,7 @@ export type SkillKey =
   // --- Prep phase ---
   | "docket-add"
   | "docket-summarise"
+  | "guest-enrich"
   | "research-brief-facts"
   | "research-brief-synth"
   | "research-brief" // fallback single-stage (used when feature flag off)
@@ -61,6 +62,7 @@ export const MODEL_ROUTING: Record<SkillKey, ModelConfig> = {
   // === Prep phase ===
   "docket-add": { via: "openrouter", model: GROK_FAST, maxTokens: 2048 },
   "docket-summarise": { via: "openrouter", model: HAIKU, maxTokens: 2048 },
+  "guest-enrich": { via: "openrouter", model: GROK_FAST, maxTokens: 2048 },
 
   // research-brief is split into 2 stages (Grok facts → Sonnet synth).
   // The single-stage "research-brief" key is kept as a fallback.

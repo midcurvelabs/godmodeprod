@@ -9,6 +9,11 @@ export const SKILL_REGISTRY = {
     model: "gemini" as const,
     description: "Summarize current docket for review",
   },
+  "guest-enrich": {
+    queue: "ai-jobs" as const,
+    model: "gemini" as const,
+    description: "Enrich a guest entry with bio + background",
+  },
   "research-brief": {
     queue: "ai-jobs" as const,
     model: "claude" as const,

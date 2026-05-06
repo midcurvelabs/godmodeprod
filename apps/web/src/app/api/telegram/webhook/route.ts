@@ -13,6 +13,9 @@ import { ensureLatestEpisode, SKILL_REGISTRY } from "@godmodeprod/shared";
  * Supported commands:
  *   /docket <url> [note]   — add a topic to the latest episode
  *   /list                  — reply with titles of last 10 topics on latest episode
+ *   /guest <name | @handle | url> [-- note]
+ *                          — add a guest to the show wishlist (async enrichment)
+ *   /guests                — reply with last 10 guests in the wishlist
  */
 
 interface TgUser {
@@ -38,6 +41,8 @@ interface TgUpdate {
 }
 
 const URL_RE = /https?:\/\/\S+/i;
+const TWITTER_HANDLE_RE = /(?:^|\s)@([A-Za-z0-9_]{1,15})\b/;
+const TWITTER_URL_RE = /^https?:\/\/(x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})(?:\/|$|\?)/i;
 
 async function sendMessage(chatId: number, text: string, replyTo?: number) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -99,7 +104,12 @@ export async function POST(request: Request) {
   const text = message.text.trim();
 
   // Only handle known commands.
-  if (!text.startsWith("/docket") && !text.startsWith("/list")) {
+  // NOTE: order matters — `/guests` must be tested before `/guest`.
+  const isGuestList = text.startsWith("/guests");
+  const isGuestAdd = !isGuestList && text.startsWith("/guest");
+  const isDocket = text.startsWith("/docket");
+  const isListCmd = text.startsWith("/list") && !isGuestList;
+  if (!isDocket && !isListCmd && !isGuestAdd && !isGuestList) {
     return NextResponse.json({ ok: true });
   }
 
@@ -114,7 +124,7 @@ export async function POST(request: Request) {
   }
 
   // --- /list ---
-  if (text.startsWith("/list")) {
+  if (isListCmd) {
     const episode = await ensureLatestEpisode(supabase, showId);
     const { data: topics } = await supabase
       .from("docket_topics")
@@ -134,6 +144,132 @@ export async function POST(request: Request) {
         message.message_id
       );
     }
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- /guests ---
+  if (isGuestList) {
+    const { data: guests } = await supabase
+      .from("guests")
+      .select("name, twitter_handle, status")
+      .eq("show_id", showId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (!guests || guests.length === 0) {
+      await sendMessage(message.chat.id, "Guest wishlist is empty.", message.message_id);
+    } else {
+      const lines = guests.map((g, i) => {
+        const handle = g.twitter_handle ? ` (@${g.twitter_handle})` : "";
+        return `${i + 1}. ${g.name}${handle} [${g.status}]`;
+      });
+      await sendMessage(
+        message.chat.id,
+        `Guest wishlist — last ${guests.length}:\n${lines.join("\n")}`,
+        message.message_id
+      );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- /guest <name | @handle | url> [-- note] ---
+  if (isGuestAdd) {
+    const afterCommand = text.replace(/^\/guest(@\S+)?\s*/, "");
+
+    // Split off an optional note after `--` so handles/URLs in the note don't
+    // confuse the parser.
+    const [headRaw, ...noteParts] = afterCommand.split(/\s+--\s+/);
+    const head = (headRaw || "").trim();
+    const noteText = noteParts.join(" -- ").trim();
+
+    if (!head) {
+      await sendMessage(
+        message.chat.id,
+        "Usage: /guest <name | @handle | url> [-- note]",
+        message.message_id
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // Pull out URL, twitter handle, and what's left = display name.
+    const urlMatch = head.match(URL_RE);
+    const sourceUrl = urlMatch?.[0] || "";
+    let remainder = head.replace(URL_RE, "").trim();
+
+    // If the URL looks like a Twitter/X profile, pull the handle from it.
+    let twitterHandle = "";
+    let twitterUrl = "";
+    if (sourceUrl) {
+      const twMatch = sourceUrl.match(TWITTER_URL_RE);
+      if (twMatch) {
+        twitterHandle = twMatch[2];
+        twitterUrl = sourceUrl;
+      }
+    }
+    if (!twitterHandle) {
+      const handleMatch = remainder.match(TWITTER_HANDLE_RE);
+      if (handleMatch) {
+        twitterHandle = handleMatch[1];
+        remainder = remainder.replace(handleMatch[0], "").trim();
+      }
+    }
+    if (twitterHandle && !twitterUrl) {
+      twitterUrl = `https://x.com/${twitterHandle}`;
+    }
+
+    const fallbackName =
+      remainder || (twitterHandle ? `@${twitterHandle}` : sourceUrl || "Unknown");
+
+    const { data: guest, error: insertError } = await supabase
+      .from("guests")
+      .insert({
+        show_id: showId,
+        name: fallbackName,
+        twitter_handle: twitterHandle,
+        twitter_url: twitterUrl,
+        source_url: sourceUrl,
+        notes: noteText,
+        status: "wishlist",
+        submitted_by: submitterFrom(message.from),
+      })
+      .select()
+      .single();
+
+    if (insertError || !guest) {
+      // Conflict on (show_id, lower(twitter_handle)) → already on the wishlist.
+      const isDup = insertError?.code === "23505";
+      await sendMessage(
+        message.chat.id,
+        isDup
+          ? `ℹ️ ${twitterHandle ? "@" + twitterHandle : fallbackName} is already on the wishlist.`
+          : `⚠️ Failed to add: ${insertError?.message || "unknown"}`,
+        message.message_id
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    await supabase.from("jobs").insert({
+      show_id: showId,
+      episode_id: null,
+      queue: SKILL_REGISTRY["guest-enrich"]?.queue || "ai-jobs",
+      job_type: "guest-enrich",
+      status: "pending",
+      payload: {
+        guestId: guest.id,
+        showId,
+        name: fallbackName,
+        twitterHandle: twitterHandle || undefined,
+        twitterUrl: twitterUrl || undefined,
+        sourceUrl: sourceUrl || undefined,
+        notes: noteText || undefined,
+      },
+    });
+
+    await sendMessage(
+      message.chat.id,
+      `✅ Added ${fallbackName} to guest wishlist — enriching now.`,
+      message.message_id
+    );
     return NextResponse.json({ ok: true });
   }
 

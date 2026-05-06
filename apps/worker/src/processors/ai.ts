@@ -13,6 +13,7 @@ const AI_SKILLS = new Set([
   "humanizer",
   "docket-add",
   "docket-summarise",
+  "guest-enrich",
   "transcript-ingest",
   "repurpose-analyze",
 ]);

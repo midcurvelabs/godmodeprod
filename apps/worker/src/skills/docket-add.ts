@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase";
 import { callModel } from "../lib/router";
+import { fetchUrlContent } from "../lib/scrape";
 
 interface DocketAddPayload {
   topicId: string;
@@ -7,112 +8,6 @@ interface DocketAddPayload {
   episodeId: string;
   url?: string;
   rawText?: string;
-}
-
-// --- URL scraping helpers ---
-
-function isTwitterUrl(url: string): boolean {
-  return /^https?:\/\/(x\.com|twitter\.com)\//i.test(url);
-}
-
-interface ScrapedContent {
-  text: string;
-  imageUrl?: string;
-}
-
-async function scrapeTwitter(url: string): Promise<ScrapedContent> {
-  // Use FxTwitter API — returns tweet JSON without auth
-  const fxUrl = url
-    .replace(/^https?:\/\/(x\.com|twitter\.com)/i, "https://api.fxtwitter.com");
-  const res = await fetch(fxUrl, {
-    headers: { "User-Agent": "GodModeProd/1.0" },
-  });
-  if (!res.ok) throw new Error(`FxTwitter ${res.status}`);
-  const data = await res.json();
-  const tweet = data.tweet;
-  if (!tweet) throw new Error("No tweet data returned");
-  const parts = [
-    `Author: ${tweet.author?.name || "Unknown"} (@${tweet.author?.screen_name || "unknown"})`,
-    `Text: ${tweet.text}`,
-  ];
-  if (tweet.created_at) parts.push(`Posted: ${tweet.created_at}`);
-  if (tweet.likes) parts.push(`Likes: ${tweet.likes}`);
-  if (tweet.retweets) parts.push(`Retweets: ${tweet.retweets}`);
-  if (tweet.media?.all?.length) {
-    parts.push(`Media: ${tweet.media.all.length} attachment(s)`);
-  }
-  const imageUrl: string | undefined = tweet.media?.photos?.[0]?.url || undefined;
-  return { text: parts.join("\n"), imageUrl };
-}
-
-async function scrapeGenericUrl(url: string): Promise<ScrapedContent> {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; GodModeProd/1.0)",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    },
-    redirect: "follow",
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const html = await res.text();
-  // Extract title
-  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-  const title = titleMatch ? titleMatch[1].trim() : "";
-  // Extract meta description
-  const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
-    || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
-  const desc = descMatch ? descMatch[1].trim() : "";
-  // Extract og:title, og:description and og:image
-  const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
-  const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
-  const ogImageMatch =
-    html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i)
-    || html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i)
-    || html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["']/i);
-  let imageUrl: string | undefined = ogImageMatch?.[1]?.trim() || undefined;
-  // Resolve protocol-relative and relative og:image URLs against the page URL.
-  if (imageUrl) {
-    try {
-      imageUrl = new URL(imageUrl, url).toString();
-    } catch {
-      // If resolution fails, drop the value rather than persisting something broken.
-      imageUrl = undefined;
-    }
-  }
-  // Strip HTML tags from body text, take first 2000 chars
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-  let bodyText = "";
-  if (bodyMatch) {
-    bodyText = bodyMatch[1]
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 2000);
-  }
-  const parts = [];
-  if (title || ogTitleMatch?.[1]) parts.push(`Title: ${ogTitleMatch?.[1] || title}`);
-  if (desc || ogDescMatch?.[1]) parts.push(`Description: ${ogDescMatch?.[1] || desc}`);
-  if (bodyText) parts.push(`Content: ${bodyText}`);
-  return {
-    text: parts.join("\n\n") || "Could not extract content from page.",
-    imageUrl,
-  };
-}
-
-async function fetchUrlContent(url: string): Promise<ScrapedContent> {
-  try {
-    if (isTwitterUrl(url)) {
-      return await scrapeTwitter(url);
-    }
-    return await scrapeGenericUrl(url);
-  } catch (err) {
-    return {
-      text: `[Failed to fetch URL content: ${err instanceof Error ? err.message : String(err)}]\nURL: ${url}`,
-    };
-  }
 }
 
 const SYSTEM_PROMPT = `You are a podcast topic researcher for a tech/web3/AI podcast.

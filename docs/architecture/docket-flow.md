@@ -158,5 +158,29 @@ A `docket_topics` row with `original_url`, `submitted_by` (`First Name @username
 |---|---|---|
 | Anyone in allow-listed Telegram chats | `/docket <url> [note]` | Add a topic to the latest episode |
 | Anyone in allow-listed Telegram chats | `/list` | Read last 10 topics on latest episode |
-| Rik / Ben / Luca | Claude Desktop + MCP | Read everything: episodes, topics, comments, votes, research brief, show context |
+| Rik / Ben / Luca | Claude Desktop + MCP | Read everything: episodes, topics, comments, votes, research brief, show context, **guest wishlist** |
 | Rik / Ben / Luca | `/docket` web UI | Full read/write — vote, comment, reorder, lock, edit angles, etc. |
+
+---
+
+## Guest wishlist (parallel flow)
+
+The guest wishlist reuses the docket pattern — Telegram in, MCP out — but is **show-level** instead of episode-level (a long-lived pool, not per-episode candidates).
+
+**Inbound (Telegram):**
+
+| Command | Behavior |
+|---|---|
+| `/guest <name \| @handle \| url> [-- note]` | Insert a row into `guests` (status `wishlist`). If a Twitter handle or URL is present, the worker will scrape the profile via FxTwitter; otherwise it works from the name + any URL. Parses the note after `--`. |
+| `/guests` | Reply with the last 10 guests in the wishlist with their status. |
+
+The handler enqueues a `guest-enrich` job (queue `ai-jobs`) — the worker calls Grok‑4‑Fast (same routing as `docket-add`) and updates the guest row with `bio`, `background`, and `original_image_url`. Telegram acks immediately; enrichment is async.
+
+**Outbound (MCP):**
+
+| Tool | Purpose |
+|---|---|
+| `list_guests` | Wishlist entries (latest first). Filter by `status` (`wishlist` / `contacted` / `confirmed` / `recorded` / `declined`). |
+| `get_guest` | Full detail for one guest, including `background` and raw `enrichment_data`. |
+
+Same per-host bearer-token auth as the docket tools — no extra wiring on the host side.

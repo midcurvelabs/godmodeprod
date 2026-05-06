@@ -191,6 +191,62 @@ const handler = createMcpHandler(
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       }
     );
+
+    server.registerTool(
+      "list_guests",
+      {
+        title: "List guest wishlist",
+        description:
+          "List guests in the show's guest wishlist (latest first). Filter by status if needed.",
+        inputSchema: {
+          status: z
+            .enum(["wishlist", "contacted", "confirmed", "recorded", "declined"])
+            .optional(),
+          limit: z.number().int().positive().max(100).default(50),
+        },
+      },
+      async ({ status, limit }) => {
+        const showId = ensureShowId();
+        const supabase = getSupabaseServer();
+        let q = supabase
+          .from("guests")
+          .select(
+            "id, name, twitter_handle, twitter_url, source_url, bio, status, submitted_by, original_image_url, created_at"
+          )
+          .eq("show_id", showId)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+        return {
+          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+        };
+      }
+    );
+
+    server.registerTool(
+      "get_guest",
+      {
+        title: "Get guest detail",
+        description:
+          "Full detail for a single guest, including bio, background, and enrichment_data.",
+        inputSchema: { id: z.string().uuid() },
+      },
+      async ({ id }) => {
+        const supabase = getSupabaseServer();
+        const { data, error } = await supabase
+          .from("guests")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        if (!data) throw new Error(`Guest ${id} not found`);
+        return {
+          content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+        };
+      }
+    );
   },
   {},
   {
