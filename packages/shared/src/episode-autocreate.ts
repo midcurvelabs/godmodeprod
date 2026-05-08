@@ -22,19 +22,11 @@ function toDateOnly(d: Date): string {
 }
 
 /**
- * Ensure there is a usable "latest" episode for the given show, auto-advancing
- * to a new episode scheduled for the next Thursday whenever the previous
- * recording date has passed.
- *
- * Rules:
- *   1. No episodes exist          → create EP 01, recording next Thursday.
- *   2. Latest has no recording_date → return latest as-is (user hasn't scheduled).
- *   3. Latest.recording_date < today → create EP N+1, recording next Thursday.
- *   4. Otherwise                   → return latest.
- *
- * The function is additive — desktop flows that select an episode manually
- * continue to work; this is intended for surfaces (mobile, Telegram bot) that
- * need a sensible default with zero taps.
+ * Return the highest-numbered episode for the show. Rollover is manual —
+ * a new episode is only created via the dashboard "New Episode" modal or the
+ * Telegram `/new-episode` command. The one exception is bootstrap: if the
+ * show has no episodes at all, EP 01 is created so the first capture has
+ * somewhere to land.
  */
 export async function ensureLatestEpisode(
   supabase: SupabaseClient,
@@ -50,34 +42,13 @@ export async function ensureLatestEpisode(
 
   if (selectError) throw selectError;
 
+  if (latestRows && latestRows.length > 0) {
+    return latestRows[0] as Episode;
+  }
+
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
-
-  // 1. No episodes → create EP 01.
-  if (!latestRows || latestRows.length === 0) {
-    return createEpisode(supabase, showId, 1, toDateOnly(nextThursday(today)));
-  }
-
-  const latest = latestRows[0] as Episode;
-
-  // 2. No recording date — user hasn't set it yet, don't advance.
-  if (!latest.recording_date) return latest;
-
-  const recording = new Date(latest.recording_date);
-  recording.setHours(0, 0, 0, 0);
-
-  // 3. Past recording date → new episode.
-  if (recording.getTime() < today.getTime()) {
-    return createEpisode(
-      supabase,
-      showId,
-      latest.episode_number + 1,
-      toDateOnly(nextThursday(today))
-    );
-  }
-
-  // 4. Current or future recording — use it.
-  return latest;
+  return createEpisode(supabase, showId, 1, toDateOnly(nextThursday(today)));
 }
 
 async function createEpisode(

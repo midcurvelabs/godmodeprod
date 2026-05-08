@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { ensureLatestEpisode, SKILL_REGISTRY } from "@godmodeprod/shared";
+import {
+  ensureLatestEpisode,
+  nextThursday,
+  SKILL_REGISTRY,
+} from "@godmodeprod/shared";
 
 /**
  * Telegram Bot webhook.
@@ -13,10 +17,13 @@ import { ensureLatestEpisode, SKILL_REGISTRY } from "@godmodeprod/shared";
  * Supported commands:
  *   /docket <url> [note]   — add a topic to the latest episode
  *   /list                  — reply with titles of last 10 topics on latest episode
+ *   /topics                — reply with all topics on the latest episode
+ *   /new-episode           — start the next episode (manual rollover)
  *   /guest <name | @handle | url> [-- note]
  *                          — add a guest to the show wishlist (async enrichment)
  *   /guests                — reply with last 10 guests in the wishlist
  *   /wishlist              — reply with the full guest wishlist
+ *   /help                  — list commands
  */
 
 interface TgUser {
@@ -111,14 +118,42 @@ export async function POST(request: Request) {
   const isGuestAdd =
     !isGuestList && !isWishlist && text.startsWith("/guest");
   const isDocket = text.startsWith("/docket");
+  const isTopics = text.startsWith("/topics");
   const isListCmd = text.startsWith("/list") && !isGuestList;
+  const isNewEpisode =
+    text.startsWith("/new-episode") ||
+    text.startsWith("/new_episode") ||
+    text.startsWith("/newep");
+  const isHelp = text.startsWith("/help") || text.startsWith("/start");
+
   if (
     !isDocket &&
     !isListCmd &&
+    !isTopics &&
+    !isNewEpisode &&
     !isGuestAdd &&
     !isGuestList &&
-    !isWishlist
+    !isWishlist &&
+    !isHelp
   ) {
+    return NextResponse.json({ ok: true });
+  }
+
+  if (isHelp) {
+    await sendMessage(
+      message.chat.id,
+      [
+        "Commands:",
+        "/docket <url> [note] — add a topic to the current episode",
+        "/list — show the current episode's last 10 topics",
+        "/topics — show all topics on the current episode",
+        "/new-episode — start the next episode (use when the current one is done recording)",
+        "/guest <name | @handle | url> [-- note] — add a guest to the wishlist",
+        "/guests — show last 10 guests in the wishlist",
+        "/wishlist — show the full guest wishlist",
+      ].join("\n"),
+      message.message_id
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -129,6 +164,61 @@ export async function POST(request: Request) {
   const showId = shows?.[0]?.id as string | undefined;
   if (!showId) {
     await sendMessage(message.chat.id, "⚠️ No show configured.", message.message_id);
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- /new-episode ---
+  if (isNewEpisode) {
+    const { data: latestRows, error: selectError } = await supabase
+      .from("episodes")
+      .select("episode_number")
+      .eq("show_id", showId)
+      .order("episode_number", { ascending: false })
+      .limit(1);
+
+    if (selectError) {
+      await sendMessage(
+        message.chat.id,
+        `⚠️ Failed to read episodes: ${selectError.message}`,
+        message.message_id
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    const nextNumber =
+      latestRows && latestRows.length > 0 ? latestRows[0].episode_number + 1 : 1;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const recordingDate = nextThursday(today).toISOString().slice(0, 10);
+
+    const { data: created, error: insertError } = await supabase
+      .from("episodes")
+      .insert({
+        show_id: showId,
+        episode_number: nextNumber,
+        title: `EP ${String(nextNumber).padStart(2, "0")}`,
+        recording_date: recordingDate,
+        status: "created",
+      })
+      .select()
+      .single();
+
+    if (insertError || !created) {
+      await sendMessage(
+        message.chat.id,
+        `⚠️ Failed to create episode: ${insertError?.message || "unknown"}`,
+        message.message_id
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    const epLabel = `EP ${String(created.episode_number).padStart(2, "0")}`;
+    await sendMessage(
+      message.chat.id,
+      `🎬 Started ${epLabel}. Recording ${created.recording_date}. Future /docket captures land here.`,
+      message.message_id
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -152,6 +242,47 @@ export async function POST(request: Request) {
         `${epLabel} — last ${topics.length} topics:\n${lines.join("\n")}`,
         message.message_id
       );
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- /topics ---
+  if (isTopics) {
+    const episode = await ensureLatestEpisode(supabase, showId);
+    const { data: topics } = await supabase
+      .from("docket_topics")
+      .select("title, status, sort_order")
+      .eq("episode_id", episode.id)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    const epLabel = `EP ${String(episode.episode_number).padStart(2, "0")}`;
+    if (!topics || topics.length === 0) {
+      await sendMessage(message.chat.id, `${epLabel} has no topics yet.`, message.message_id);
+      return NextResponse.json({ ok: true });
+    }
+
+    const header = `${epLabel} — ${topics.length} topic${topics.length === 1 ? "" : "s"}:`;
+    const lines = topics.map((t, i) => `${i + 1}. ${t.title} [${t.status}]`);
+
+    // Telegram caps messages at 4096 chars; chunk to stay well under that.
+    const MAX = 3500;
+    const chunks: string[] = [];
+    let buf = header;
+    for (const line of lines) {
+      if (buf.length + 1 + line.length > MAX) {
+        chunks.push(buf);
+        buf = line;
+      } else {
+        buf += "\n" + line;
+      }
+    }
+    if (buf.length > 0) chunks.push(buf);
+
+    let replyTo: number | undefined = message.message_id;
+    for (const chunk of chunks) {
+      await sendMessage(message.chat.id, chunk, replyTo);
+      replyTo = undefined;
     }
     return NextResponse.json({ ok: true });
   }
