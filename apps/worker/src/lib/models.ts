@@ -56,7 +56,7 @@ export type SkillKey =
 // env override like `MODEL_OVERRIDE_slide_generation=anthropic/claude-sonnet-4.5`.
 const SONNET = "anthropic/claude-sonnet-4.6";
 const HAIKU = "anthropic/claude-haiku-4.5";
-const GROK_FAST = "x-ai/grok-4-fast";
+const GROK_FAST = "x-ai/grok-4.3";
 
 export const MODEL_ROUTING: Record<SkillKey, ModelConfig> = {
   // === Prep phase ===
