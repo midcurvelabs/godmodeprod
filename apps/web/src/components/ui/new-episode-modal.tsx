@@ -15,6 +15,14 @@ export function NewEpisodeModal({ onClose }: { onClose: () => void }) {
     ? Math.max(...episodes.map((e) => e.episode_number)) + 1
     : 1;
 
+  // The latest episode not recorded yet means a new one would become a duplicate week (EP 33 / EP 34, Oct 2026).
+  const latest = episodes.reduce<(typeof episodes)[number] | null>(
+    (a, e) => (!a || e.episode_number > a.episode_number ? e : a),
+    null
+  );
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const latestUnrecorded = !!latest?.recording_date && latest.recording_date >= todayStr;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!currentShow || !title.trim()) return;
@@ -43,6 +51,14 @@ export function NewEpisodeModal({ onClose }: { onClose: () => void }) {
             <X size={20} />
           </button>
         </div>
+
+        {latestUnrecorded && latest && (
+          <p className="mb-4 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-sm text-text-secondary">
+            EP {String(latest.episode_number).padStart(2, "0")} records on {latest.recording_date} and hasn&apos;t
+            been recorded yet. New captures land on the newest episode, so only create EP{" "}
+            {String(nextNumber).padStart(2, "0")} if you mean to.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

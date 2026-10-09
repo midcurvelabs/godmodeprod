@@ -147,7 +147,7 @@ export async function POST(request: Request) {
         "/docket <url> [note] — add a topic to the current episode",
         "/list — show the current episode's last 10 topics",
         "/topics — show all topics on the current episode",
-        "/new-episode — start the next episode (use when the current one is done recording)",
+        "/new-episode — start the next episode (only after the current one is recorded; add 'force' to override)",
         "/guest <name | @handle | url> [-- note] — add a guest to the wishlist",
         "/guests — show last 10 guests in the wishlist",
         "/wishlist — show the full guest wishlist",
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
   if (isNewEpisode) {
     const { data: latestRows, error: selectError } = await supabase
       .from("episodes")
-      .select("episode_number")
+      .select("episode_number, recording_date")
       .eq("show_id", showId)
       .order("episode_number", { ascending: false })
       .limit(1);
@@ -190,6 +190,23 @@ export async function POST(request: Request) {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Guard: refuse to start a new episode while the latest one has not been recorded yet. A second /new-episode
+    // in the same week created EP 34 next to EP 33 (both dated 2026-10-01) and every later capture landed on the
+    // duplicate. "/new-episode force" still creates it on purpose.
+    const force = /\bforce\b/i.test(text);
+    const latest = latestRows && latestRows.length > 0 ? latestRows[0] : null;
+    const todayStr = today.toISOString().slice(0, 10);
+    if (!force && latest?.recording_date && latest.recording_date >= todayStr) {
+      const latestLabel = `EP ${String(latest.episode_number).padStart(2, "0")}`;
+      await sendMessage(
+        message.chat.id,
+        `⚠️ ${latestLabel} records on ${latest.recording_date} and hasn't been recorded yet, so captures still land there. ` +
+          `Send "/new-episode force" if you really want to start EP ${String(nextNumber).padStart(2, "0")} now.`,
+        message.message_id
+      );
+      return NextResponse.json({ ok: true });
+    }
     const recordingDate = nextThursday(today).toISOString().slice(0, 10);
 
     const { data: created, error: insertError } = await supabase

@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PODPRODUCT — Interactive UX Prototype</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --elevated: #1e1e1e;
+      --line: #2a2a2a;
+      --fg: #f2f0eb;
+      --muted: #888;
+      --dim: #555;
+      --accent: #f5c400;
+      --accent-soft: rgba(245, 196, 0, 0.12);
+      --accent-fg: #0a0a0a;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --rik: #f5c400;
+      --ben: #6ee7b7;
+      --luca: #93c5fd;
+      --display: "Bebas Neue", sans-serif;
+      --sans: "DM Sans", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --nav: 220px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, textarea, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; text-decoration: none; }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--nav) 1fr;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      .nav { display: none; }
+      .nav.open { display: flex; position: fixed; inset: 0 auto 0 0; width: min(280px, 85vw); z-index: 40; }
+      .backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 30; }
+      .backdrop.show { display: block; }
+    }
+
+    /* Nav */
+    .nav {
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .logo {
+      height: 56px;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .logo strong {
+      font-family: var(--display);
+      font-size: 28px;
+      color: var(--accent);
+      letter-spacing: .02em;
+      line-height: 1;
+      font-weight: 400;
+    }
+    .logo span {
+      font-size: 9px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--dim);
+    }
+    .nav-scroll { flex: 1; overflow: auto; padding: 16px 0; }
+    .nav-sec {
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--dim);
+      padding: 10px 16px 6px;
+    }
+    .nav-item {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 16px;
+      background: transparent;
+      border: 0;
+      border-right: 2px solid transparent;
+      color: var(--muted);
+      text-align: left;
+    }
+    .nav-item:hover { color: var(--fg); background: var(--elevated); }
+    .nav-item.active {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-right-color: var(--accent);
+    }
+    .soon {
+      font-size: 9px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      border: 1px solid var(--line);
+      padding: 2px 5px;
+      color: var(--dim);
+    }
+    .proto-note {
+      margin: 12px;
+      padding: 10px;
+      border: 1px dashed rgba(245,196,0,.35);
+      background: var(--accent-soft);
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .proto-note b { color: var(--accent); }
+
+    /* Main */
+    .main { min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+    .topbar {
+      height: 56px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 0 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .menu-btn {
+      display: none;
+      border: 1px solid var(--line);
+      background: var(--elevated);
+      color: var(--fg);
+      padding: 6px 10px;
+    }
+    @media (max-width: 900px) { .menu-btn { display: inline-flex; } }
+    .ep-switch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: var(--elevated);
+      padding: 6px 10px;
+      min-width: 0;
+    }
+    .ep-switch .ep {
+      font-family: var(--display);
+      font-size: 20px;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .ep-switch .title { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .status {
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      border: 1px solid rgba(245,196,0,.35);
+      color: var(--accent);
+      padding: 3px 7px;
+      white-space: nowrap;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--elevated);
+      color: var(--fg);
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .btn:hover { border-color: var(--muted); }
+    .btn-primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accent-fg);
+    }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-ghost { background: transparent; }
+    .btn-sm { padding: 6px 9px; font-size: 11px; }
+
+    .content { padding: 20px; flex: 1; }
+    .view { display: none; animation: fade .18s ease; }
+    .view.active { display: block; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .page-head { margin-bottom: 18px; }
+    .page-head h1 {
+      font-family: var(--display);
+      font-size: clamp(36px, 5vw, 52px);
+      letter-spacing: .02em;
+      margin: 0 0 4px;
+      font-weight: 400;
+      line-height: .95;
+    }
+    .page-head h1 em { color: var(--accent); font-style: normal; }
+    .page-head p { margin: 0; color: var(--muted); max-width: 60ch; }
+
+    .grid-2 { display: grid; grid-template-columns: 1.4fr .8fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .grid-mods { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    @media (max-width: 1100px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-3, .grid-mods { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 14px;
+    }
+    .panel-title {
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin: 0 0 10px;
+    }
+
+    .next {
+      border: 1px solid rgba(245,196,0,.35);
+      background: var(--accent-soft);
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      width: 100%;
+      text-align: left;
+    }
+    .next .k { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+    .next .v { font-weight: 600; }
+
+    .phases {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .phase .row { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+    .bar { height: 4px; background: var(--elevated); border-radius: 2px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--accent); }
+
+    .mod {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 14px;
+      text-align: left;
+      width: 100%;
+    }
+    .mod:hover { border-color: rgba(245,196,0,.4); background: #161410; }
+    .mod.soon { opacity: .7; border-style: dashed; }
+    .mod-top { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .mod-name { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    .pill {
+      font-size: 10px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      border: 1px solid var(--line);
+      padding: 2px 7px;
+      color: var(--muted);
+    }
+    .pill.done { color: var(--ok); border-color: rgba(34,197,94,.35); }
+    .pill.progress { color: var(--warn); border-color: rgba(245,158,11,.35); }
+    .pill.soon { color: var(--dim); }
+    .mod p { margin: 0; color: var(--muted); font-size: 13px; }
+
+    .section-label {
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--dim);
+      margin: 18px 0 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .feed-item {
+      display: grid;
+      grid-template-columns: 56px 1fr;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+    .feed-item:last-child { border-bottom: 0; }
+    .feed-item time { color: var(--dim); font-family: var(--mono); font-size: 10px; }
+    .feed-item b { font-weight: 600; display: block; margin-bottom: 2px; }
+    .feed-item span { color: var(--muted); }
+
+    /* Docket */
+    .docket {
+      display: grid;
+      grid-template-columns: 1.1fr 1.2fr .9fr;
+      gap: 12px;
+      min-height: 520px;
+    }
+    @media (max-width: 1100px) { .docket { grid-template-columns: 1fr; } }
+    .topic {
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      padding: 10px 8px;
+    }
+    .topic:hover, .topic.active { background: var(--elevated); border-color: var(--line); }
+    .topic strong { display: block; font-size: 13px; margin-bottom: 4px; }
+    .topic meta { color: var(--dim); font-size: 11px; }
+    .detail h3 { margin: 0 0 8px; font-size: 18px; }
+    .detail p { color: var(--muted); margin: 0 0 12px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .lineup-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    /* Kit */
+    .tabs { display: flex; gap: 4px; overflow-x: auto; margin-bottom: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+    .tab {
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      padding: 7px 10px;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .tab.on { color: var(--fg); border-color: var(--line); background: var(--elevated); }
+    .host-col .hn {
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .clip {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .clip h4 { margin: 0 0 8px; font-size: 13px; }
+    .cut { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.5; margin-bottom: 8px; }
+    .cut .in { color: var(--ben); }
+    .cut b { color: var(--dim); font-weight: 500; display: inline-block; min-width: 2em; }
+    .clip-meta { display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 10px; color: var(--dim); }
+    .p1 { color: var(--accent); border: 1px solid rgba(245,196,0,.35); padding: 1px 5px; }
+
+    /* Handoffs */
+    .handoff {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 12px;
+      min-height: 480px;
+    }
+    @media (max-width: 900px) { .handoff { grid-template-columns: 1fr; } }
+    .h-card {
+      width: 100%;
+      text-align: left;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .h-card.on { border-color: rgba(245,196,0,.5); background: var(--accent-soft); }
+    .h-card strong { display: block; margin-bottom: 4px; }
+    .h-card span { color: var(--muted); font-size: 12px; }
+    .prompt {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 16px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      color: #d6d3cb;
+      min-height: 360px;
+      max-height: 520px;
+      overflow: auto;
+    }
+
+    /* Settings */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 800px) { .form-grid { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+    .field { margin-bottom: 14px; }
+    input, select, textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      color: var(--fg);
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: rgba(245,196,0,.5); }
+    textarea { min-height: 90px; resize: vertical; }
+    .host-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      margin-bottom: 8px;
+    }
+
+    /* Research / cockpit lite */
+    .brief {
+      background: var(--bg);
+      border: 1px solid var(--line);
+      padding: 16px;
+    }
+    .brief h3 { margin: 0 0 8px; font-size: 15px; }
+    .brief p { margin: 0 0 10px; color: var(--muted); }
+    .cblock {
+      display: grid;
+      grid-template-columns: 64px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      padding: 10px;
+      margin-bottom: 6px;
+    }
+    .tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-align: center;
+      border-left: 3px solid;
+      padding: 4px 0;
+    }
+    .tag.lead { border-color: var(--accent); color: var(--accent); }
+    .tag.sig { border-color: var(--luca); color: var(--luca); }
+    .tag.gmt { border-color: var(--ben); color: var(--ben); }
+    .mins { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+    .toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      background: var(--accent);
+      color: var(--accent-fg);
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      transform: translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: .2s ease;
+      z-index: 50;
+    }
+    .toast.show { transform: none; opacity: 1; }
+
+    .banner {
+      border: 1px dashed rgba(245,196,0,.4);
+      background: var(--accent-soft);
+      padding: 10px 12px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .banner b { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="backdrop" id="backdrop"></div>
+  <div class="app">
+    <aside class="nav" id="nav">
+      <div class="logo">
+        <strong>PROD</strong>
+        <span>Podcast OS · prototype</span>
+      </div>
+      <div class="nav-scroll">
+        <div class="nav-sec">Production</div>
+        <button class="nav-item active" data-view="dashboard">Dashboard</button>
+        <button class="nav-item" data-view="docket">Docket</button>
+        <button class="nav-item" data-view="research">Research</button>
+        <button class="nav-item" data-view="cockpit">Cockpit</button>
+        <div class="nav-sec">Post</div>
+        <button class="nav-item" data-view="kit">Content Kit</button>
+        <button class="nav-item" data-view="handoffs">Handoffs</button>
+        <button class="nav-item" data-view="newsletter">Newsletter</button>
+        <div class="nav-sec">Later</div>
+        <button class="nav-item" data-view="soon"><span>Video Pipeline</span><span class="soon">Soon</span></button>
+        <div class="nav-sec">Setup</div>
+        <button class="nav-item" data-view="settings">Show &amp; Toolchain</button>
+      </div>
+      <div class="proto-note">
+        <b>Clickable prototype</b> — fake data, real IA. Use this to lock UX before rebuild.
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0">
+          <button class="menu-btn" id="menuBtn" type="button">Menu</button>
+          <div class="ep-switch">
+            <span class="ep">EP 21</span>
+            <span class="title">Agents that actually ship</span>
+            <span class="status">Post · kit ready</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" type="button" data-view="settings">Show settings</button>
+          <button class="btn btn-primary btn-sm" type="button">New episode</button>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- DASHBOARD -->
+        <section class="view active" id="view-dashboard">
+          <div class="page-head">
+            <h1>EP <em>21</em></h1>
+            <p>Production command center. One next action. Everything else is a module.</p>
+          </div>
+          <button class="next" type="button" data-view="handoffs">
+            <div>
+              <div class="k">Next up</div>
+              <div class="v">Export edit + posting handoffs — then run your agents</div>
+            </div>
+            <span class="btn btn-primary btn-sm">Open handoffs</span>
+          </button>
+          <div class="phases">
+            <div class="phase"><div class="row"><span>Pre</span><span>100%</span></div><div class="bar"><i style="width:100%"></i></div></div>
+            <div class="phase"><div class="row"><span>Recording</span><span>100%</span></div><div class="bar"><i style="width:100%"></i></div></div>
+            <div class="phase"><div class="row"><span>Post</span><span>70%</span></div><div class="bar"><i style="width:70%"></i></div></div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <div class="section-label"><span>Pre-production</span><span>done</span></div>
+              <div class="grid-mods">
+                <button class="mod" data-view="docket"><div class="mod-top"><span class="mod-name">Docket</span><span class="pill done">Done</span></div><p>7 topics locked for the lineup.</p></button>
+                <button class="mod" data-view="research"><div class="mod-top"><span class="mod-name">Research</span><span class="pill done">Done</span></div><p>Brief ready · copy or send to runsheet.</p></button>
+                <button class="mod" data-view="cockpit"><div class="mod-top"><span class="mod-name">Cockpit</span><span class="pill done">Done</span></div><p>Live runsheet used for record.</p></button>
+              </div>
+              <div class="section-label"><span>Post-production</span><span>in progress</span></div>
+              <div class="grid-mods">
+                <button class="mod" data-view="kit"><div class="mod-top"><span class="mod-name">Content Kit</span><span class="pill done">Ready</span></div><p>18 clips · verbatim IN/OUT · all platforms.</p></button>
+                <button class="mod" data-view="handoffs"><div class="mod-top"><span class="mod-name">Handoffs</span><span class="pill progress">Next</span></div><p>Edit · thumbnail · posting instructions.</p></button>
+                <button class="mod" data-view="newsletter"><div class="mod-top"><span class="mod-name">Newsletter</span><span class="pill">Ready</span></div><p>Substack draft · copy-paste.</p></button>
+                <button class="mod soon" data-view="soon"><div class="mod-top"><span class="mod-name">Video Pipeline</span><span class="pill soon">Soon</span></div><p>Parked — agents cut from handoffs.</p></button>
+              </div>
+            </div>
+            <aside class="panel">
+              <p class="panel-title">Activity</p>
+              <div class="feed-item"><time>14:02</time><div><b>Kit generated</b><span>18 clips · SEO titles · carousels</span></div></div>
+              <div class="feed-item"><time>13:51</time><div><b>Analyze complete</b><span>Verbatim IN/OUT for all P1 clips</span></div></div>
+              <div class="feed-item"><time>13:40</time><div><b>Transcript ingested</b><span>12,482 words · 3 speakers</span></div></div>
+              <div class="feed-item"><time>Sat</time><div><b>Episode recorded</b><span>Cockpit runtime 61m</span></div></div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- DOCKET -->
+        <section class="view" id="view-docket">
+          <div class="page-head">
+            <h1>Docket</h1>
+            <p>Capture, triage, lock the lineup. One job: decide what’s In.</p>
+          </div>
+          <div class="docket">
+            <div class="panel">
+              <p class="panel-title">Inbox</p>
+              <button class="topic active" type="button"><strong>OpenRouter cost routing</strong><meta>Rik · 2h ago · Under review</meta></button>
+              <button class="topic" type="button"><strong>Riverside agent editing</strong><meta>Ben · yesterday · In</meta></button>
+              <button class="topic" type="button"><strong>Sponsor read: Midcurve</strong><meta>Luca · 3d · Out</meta></button>
+              <div style="margin-top:12px;display:flex;gap:8px">
+                <input placeholder="Paste link or topic…" style="flex:1" />
+                <button class="btn btn-primary btn-sm" type="button" data-toast="Topic queued for enrich">Add</button>
+              </div>
+            </div>
+            <div class="panel detail">
+              <p class="panel-title">Topic detail</p>
+              <h3>OpenRouter cost routing</h3>
+              <p>Why Gemini for analyze, Claude for write, Grok for X — and why a direct Anthropic key is the wrong default.</p>
+              <p style="font-size:12px;color:var(--dim);margin-bottom:14px">Sources: openrouter.ai/docs · internal router.ts notes</p>
+              <div class="actions">
+                <button class="btn btn-primary btn-sm" type="button" data-toast="Marked In">Mark In</button>
+                <button class="btn btn-sm" type="button" data-toast="Marked Out">Mark Out</button>
+                <button class="btn btn-sm" type="button" data-view="research">Send to Research</button>
+              </div>
+            </div>
+            <div class="panel">
+              <p class="panel-title">Episode lineup · ~62m</p>
+              <div class="lineup-item"><span>1. Cold open thesis</span><span class="mins">3m</span></div>
+              <div class="lineup-item"><span>2. OpenRouter routing</span><span class="mins">12m</span></div>
+              <div class="lineup-item"><span>3. Riverside agents</span><span class="mins">18m</span></div>
+              <div class="lineup-item"><span>4. Handoff > render</span><span class="mins">15m</span></div>
+              <div class="lineup-item"><span>5. Rapid fire</span><span class="mins">10m</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- RESEARCH -->
+        <section class="view" id="view-research">
+          <div class="page-head">
+            <h1>Research</h1>
+            <p>Generate once. Read like a brief. Copy or push to runsheet.</p>
+          </div>
+          <div class="grid-2">
+            <div class="panel">
+              <p class="panel-title">Builder</p>
+              <label><input type="checkbox" checked /> OpenRouter cost routing</label><br /><br />
+              <label><input type="checkbox" checked /> Riverside agent editing</label><br /><br />
+              <label><input type="checkbox" checked /> Handoff &gt; render thesis</label><br /><br />
+              <div class="field"><label>Episode framing</label><textarea>Keep it practical — operators who ship weekly.</textarea></div>
+              <button class="btn btn-primary" type="button" data-toast="Research brief generated">Generate research brief</button>
+            </div>
+            <div class="brief">
+              <h3>OpenRouter cost routing</h3>
+              <p><b style="color:var(--fg)">Thesis:</b> Route by job, not by brand loyalty. Analyze cheap, write smart, native voice where it matters.</p>
+              <p><b style="color:var(--fg)">Steel man:</b> One frontier model is simpler ops. <b style="color:var(--fg)">Straw man:</b> Cheapest model everywhere.</p>
+              <p><b style="color:var(--fg)">3 data points:</b> Gemini flash analyze · Claude write · Grok X-voice via OpenRouter only.</p>
+              <div class="actions">
+                <button class="btn btn-sm" type="button" data-toast="Brief copied">Copy all</button>
+                <button class="btn btn-sm" type="button" data-view="cockpit">Send to Cockpit</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- COCKPIT -->
+        <section class="view" id="view-cockpit">
+          <div class="page-head">
+            <h1>Cockpit</h1>
+            <p>Live runsheet. Absorb the Recording Cockpit artifact — restyled, same block model.</p>
+          </div>
+          <div class="banner"><b>Prototype:</b> block types + minute budgets. Full Prep waterfall lands in rebuild.</div>
+          <div class="panel">
+            <div class="cblock"><div class="tag lead">LEAD</div><div>Cold open · “the model is the product”</div><div class="mins">0:00–3:00</div></div>
+            <div class="cblock"><div class="tag sig">SIG</div><div>The Signal · OpenRouter + Riverside week</div><div class="mins">3:00–12:00</div></div>
+            <div class="cblock"><div class="tag gmt">GMT</div><div>God Mode Takes · handoff &gt; render</div><div class="mins">12:00–45:00</div></div>
+            <div class="cblock"><div class="tag lead" style="border-color:#f9a8d4;color:#f9a8d4">RAPID</div><div>Rapid fire · 8 prompts</div><div class="mins">45:00–55:00</div></div>
+          </div>
+        </section>
+
+        <!-- KIT -->
+        <section class="view" id="view-kit">
+          <div class="page-head" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:end">
+            <div>
+              <h1>Content Kit</h1>
+              <p>Magic moment — per-host clips with verbatim IN/OUT. Export handoffs when ready.</p>
+            </div>
+            <button class="btn btn-primary" type="button" data-view="handoffs">Export handoff pack</button>
+          </div>
+          <div class="tabs">
+            <button class="tab on" type="button">Overview</button>
+            <button class="tab" type="button">Shorts</button>
+            <button class="tab" type="button">X</button>
+            <button class="tab" type="button">LinkedIn</button>
+            <button class="tab" type="button">YouTube</button>
+            <button class="tab" type="button">Schedule</button>
+          </div>
+          <div class="grid-3">
+            <div class="host-col">
+              <div class="hn"><span class="dot" style="background:var(--rik)"></span> Rik</div>
+              <article class="clip">
+                <h4>The model is the product</h4>
+                <div class="cut"><div><b>IN</b> <span class="in">“the model is the product now”</span></div><div><b>OUT</b> <span class="in">“ship it saturday or it didn’t happen”</span></div></div>
+                <div class="clip-meta"><span>EP21_R03_model-product.mp4</span><span class="p1">P1 · 28s</span></div>
+              </article>
+              <article class="clip">
+                <h4>Never a direct Anthropic key</h4>
+                <div class="cut"><div><b>IN</b> <span class="in">“everything goes through openrouter”</span></div><div><b>OUT</b> <span class="in">“one bill, many brains”</span></div></div>
+                <div class="clip-meta"><span>EP21_R08_openrouter.mp4</span><span class="p1">P2 · 22s</span></div>
+              </article>
+            </div>
+            <div class="host-col">
+              <div class="hn"><span class="dot" style="background:var(--ben)"></span> Ben</div>
+              <article class="clip">
+                <h4>Distribution is the moat</h4>
+                <div class="cut"><div><b>IN</b> <span class="in">“distribution is the actual moat”</span></div><div><b>OUT</b> <span class="in">“clips without a schedule are inventory”</span></div></div>
+                <div class="clip-meta"><span>EP21_B07_distribution.mp4</span><span class="p1">P1 · 24s</span></div>
+              </article>
+            </div>
+            <div class="host-col">
+              <div class="hn"><span class="dot" style="background:var(--luca)"></span> Luca</div>
+              <article class="clip">
+                <h4>Agents need a runsheet</h4>
+                <div class="cut"><div><b>IN</b> <span class="in">“agents without a runsheet hallucinate”</span></div><div><b>OUT</b> <span class="in">“give them the cut sheet”</span></div></div>
+                <div class="clip-meta"><span>EP21_L02_runsheet.mp4</span><span class="p1">P2 · 31s</span></div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <!-- HANDOFFS -->
+        <section class="view" id="view-handoffs">
+          <div class="page-head">
+            <h1>Handoffs</h1>
+            <p>Paste-ready prompts for your agents. Tuned by Show &amp; Toolchain settings.</p>
+          </div>
+          <div class="handoff">
+            <div>
+              <button class="h-card on" type="button" data-prompt="edit"><strong>Edit instructions</strong><span>Codex + Riverside · computer-use</span></button>
+              <button class="h-card" type="button" data-prompt="thumb"><strong>Thumbnail brief</strong><span>image2 via Codex · base + composite</span></button>
+              <button class="h-card" type="button" data-prompt="post"><strong>Posting instructions</strong><span>Buffer web · captions + channels</span></button>
+              <button class="btn btn-primary" style="width:100%;margin-top:8px" type="button" data-toast="Handoff copied to clipboard">Copy prompt</button>
+            </div>
+            <div>
+              <p class="panel-title" id="promptLabel">Edit instructions · Codex + Riverside</p>
+              <pre class="prompt" id="promptBody">You are editing God Mode Pod EP21 in Riverside via computer use.
+
+GOAL
+Cut the following clips. Name exports exactly as given.
+Use verbatim IN/OUT strings as ctrl-F anchors (not timestamps).
+
+CLIPS
+1) EP21_R03_model-product.mp4 (≤30s, P1, Rik)
+   IN:  "the model is the product now"
+   OUT: "ship it saturday or it didn’t happen"
+   On-screen title options:
+   - THE MODEL IS THE PRODUCT
+   - SHIP IT SATURDAY
+   - ONE RECORDING → FULL WEEK
+
+2) EP21_B07_distribution.mp4 (≤30s, P1, Ben)
+   IN:  "distribution is the actual moat"
+   OUT: "clips without a schedule are inventory"
+
+When done, place files in the episode shorts folder matching the posting schedule filenames 1:1.</pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- NEWSLETTER -->
+        <section class="view" id="view-newsletter">
+          <div class="page-head">
+            <h1>Newsletter</h1>
+            <p>Ready-to-paste Substack draft.</p>
+          </div>
+          <div class="panel">
+            <div class="field"><label>Subject</label><input value="EP21 — The model is the product" /></div>
+            <div class="field"><label>Body</label><textarea style="min-height:220px">This week on God Mode Pod: why routing models by job beats brand loyalty, how Riverside agents change the edit loop, and why handoff beats in-platform rendering.
+
+Listen: [link]
+Clips drop all week on X + IG.</textarea></div>
+            <button class="btn btn-primary" type="button" data-toast="Newsletter copied">Copy draft</button>
+          </div>
+        </section>
+
+        <!-- SOON -->
+        <section class="view" id="view-soon">
+          <div class="page-head">
+            <h1>Coming soon</h1>
+            <p>In-platform video cutting stays on the roadmap. MVP ships agent handoffs instead.</p>
+          </div>
+          <div class="banner"><b>First-user build:</b> do not block on this. Edit instructions → Codex + Riverside is the path.</div>
+        </section>
+
+        <!-- SETTINGS — critical for first user -->
+        <section class="view" id="view-settings">
+          <div class="page-head">
+            <h1>Show &amp; Toolchain</h1>
+            <p>First-user setup. Configure once — every kit + handoff reads from here.</p>
+          </div>
+          <div class="form-grid">
+            <div class="panel">
+              <p class="panel-title">Show identity</p>
+              <div class="field"><label>Show name</label><input value="God Mode Pod" /></div>
+              <div class="field"><label>Accent color</label><input value="#F5C400" /></div>
+              <div class="field"><label>YouTube</label><input value="youtube.com/@godmodepod" /></div>
+              <div class="field"><label>Spotify</label><input value="open.spotify.com/show/0ZBhl5IVFa8wZPvIKNTkRP" /></div>
+              <div class="field"><label>Voice / soul (short)</label><textarea>AI + builder culture for people who ship. Saturday release. Direct, no hype.</textarea></div>
+            </div>
+            <div class="panel">
+              <p class="panel-title">Hosts</p>
+              <div class="host-row"><input value="Rik" /><input value="Direct, systems, ship energy" /></div>
+              <div class="host-row"><input value="Ben" /><input value="Distribution, sharp takes" /></div>
+              <div class="host-row"><input value="Luca" /><input value="Product, agents, clarity" /></div>
+              <button class="btn btn-sm" type="button" data-toast="Host row added">+ Add host</button>
+            </div>
+            <div class="panel">
+              <p class="panel-title">Toolchain (tunes handoffs)</p>
+              <div class="field">
+                <label>Editor</label>
+                <select>
+                  <option selected>Codex + Riverside (computer-use)</option>
+                  <option>Descript agent</option>
+                  <option>CapCut / manual</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Image / thumbnails</label>
+                <select>
+                  <option selected>image2 via Codex</option>
+                  <option>Other image agent</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Posting path</label>
+                <select>
+                  <option selected>Buffer web · computer-use instructions</option>
+                  <option>Manual copy-paste</option>
+                  <option>Buffer API (later)</option>
+                </select>
+              </div>
+              <div class="field"><label>Reference assets path</label><input value="~/rik-media/GodModePod/brand/faces/" /></div>
+            </div>
+            <div class="panel">
+              <p class="panel-title">First-user checklist</p>
+              <p style="color:var(--muted);font-size:13px;margin:0 0 12px">What a new show needs before episode 1:</p>
+              <label><input type="checkbox" checked /> Show name + links</label><br /><br />
+              <label><input type="checkbox" checked /> Hosts + voice notes</label><br /><br />
+              <label><input type="checkbox" checked /> Editor / image / posting toolchain</label><br /><br />
+              <label><input type="checkbox" /> Brand assets path</label><br /><br />
+              <label><input type="checkbox" /> First episode created</label><br /><br />
+              <button class="btn btn-primary" type="button" data-toast="Show settings saved" data-view="dashboard">Save &amp; go to Dashboard</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Saved</div>
+
+  <script>
+    const prompts = {
+      edit: {
+        label: "Edit instructions · Codex + Riverside",
+        body: `You are editing God Mode Pod EP21 in Riverside via computer use.
+
+GOAL
+Cut the following clips. Name exports exactly as given.
+Use verbatim IN/OUT strings as ctrl-F anchors (not timestamps).
+
+CLIPS
+1) EP21_R03_model-product.mp4 (≤30s, P1, Rik)
+   IN:  "the model is the product now"
+   OUT: "ship it saturday or it didn’t happen"
+   On-screen title options:
+   - THE MODEL IS THE PRODUCT
+   - SHIP IT SATURDAY
+   - ONE RECORDING → FULL WEEK
+
+2) EP21_B07_distribution.mp4 (≤30s, P1, Ben)
+   IN:  "distribution is the actual moat"
+   OUT: "clips without a schedule are inventory"
+
+When done, place files in the episode shorts folder matching the posting schedule filenames 1:1.`
+      },
+      thumb: {
+        label: "Thumbnail brief · image2 via Codex",
+        body: `Create EP21 thumbnails in two steps (base → composite).
+
+BRAND
+- Accent #F5C400 on near-black
+- Faces: ~/rik-media/GodModePod/brand/faces/
+- Identity preservation: do not restyle host faces
+
+DIRECTIONS
+1) "THE MODEL IS THE PRODUCT" — Rik dominant, yellow word mark
+2) "HANDOFF > RENDER" — three hosts, editorial crop
+3) "SHIP THE WEEK" — single payoff line, Saturday badge
+
+Output: base layer PNG + final composite per direction.`
+      },
+      post: {
+        label: "Posting instructions · Buffer web",
+        body: `Queue EP21 week in Buffer (web UI / computer-use).
+
+MAP (filename → caption → channel)
+Day 1 · IG/TikTok/Shorts
+- EP21_R03_model-product.mp4
+  Caption: [from Shorts tab · Rik P1]
+  Platforms: Instagram Reels, TikTok, YouTube Shorts
+
+Day 2 · X
+- EP21_B07_distribution.mp4
+  Caption: [from X tab · Ben P1]
+  Platform: X
+
+Day 3 · LinkedIn
+- Carousel + EP21_L02_runsheet.mp4
+  Caption: [from LinkedIn tab]
+
+Do not rename files. Schedule times: show default posting windows.`
+      }
+    };
+
+    const nav = document.getElementById("nav");
+    const backdrop = document.getElementById("backdrop");
+    const toast = document.getElementById("toast");
+    let toastTimer;
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    function go(view) {
+      document.querySelectorAll(".view").forEach((v) => v.classList.remove("active"));
+      document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
+      const el = document.getElementById("view-" + view);
+      if (el) el.classList.add("active");
+      document.querySelectorAll('.nav-item[data-view="' + view + '"]').forEach((n) => n.classList.add("active"));
+      nav.classList.remove("open");
+      backdrop.classList.remove("show");
+      window.scrollTo({ top: 0, behavior: "instant" });
+    }
+
+    document.getElementById("menuBtn").addEventListener("click", () => {
+      nav.classList.add("open");
+      backdrop.classList.add("show");
+    });
+    backdrop.addEventListener("click", () => {
+      nav.classList.remove("open");
+      backdrop.classList.remove("show");
+    });
+
+    document.body.addEventListener("click", (e) => {
+      const viewBtn = e.target.closest("[data-view]");
+      if (viewBtn) {
+        e.preventDefault();
+        go(viewBtn.getAttribute("data-view"));
+      }
+      const toastBtn = e.target.closest("[data-toast]");
+      if (toastBtn) showToast(toastBtn.getAttribute("data-toast"));
+      const promptBtn = e.target.closest("[data-prompt]");
+      if (promptBtn) {
+        document.querySelectorAll(".h-card").forEach((c) => c.classList.remove("on"));
+        promptBtn.classList.add("on");
+        const key = promptBtn.getAttribute("data-prompt");
+        document.getElementById("promptLabel").textContent = prompts[key].label;
+        document.getElementById("promptBody").textContent = prompts[key].body;
+      }
+    });
+  </script>
+</body>
+</html>
